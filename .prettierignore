@@ -1,0 +1,13 @@
+node_modules/
+.next/
+.turbo/
+**/*next-env.d.ts
+dist/
+coverage/
+pnpm-lock.yaml
+packages/db/prisma/migrations/
+docs/design/
+docs/BLUEPRINT.docx
+AGENTS.md
+PROJECT_SPEC.md
+docs/reviews/

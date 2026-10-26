@@ -1,0 +1,339 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model DeploymentLimits {
+  id               Int      @id @default(1)
+  maxUsers         Int      @default(5) @map("max_users")
+  registrationMode String   @default("invite_only") @map("registration_mode")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("deployment_limits")
+}
+
+model User {
+  id              String    @id @default(uuid()) @db.Uuid
+  email           String    @unique
+  passwordHash    String?   @map("password_hash")
+  role            String    @default("MEMBER")
+  status          String    @default("ACTIVE")
+  emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamptz
+  consentImprove  Boolean   @default(false) @map("consent_improve")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  invitationsCreated Invitation[]      @relation("UserInvitations")
+  emailTokens        EmailToken[]
+  sessions           Session[]
+  mfaTotp            MfaTotp?
+  recoveryCodes      RecoveryCode[]
+  chats              Chat[]
+  attachments        Attachment[]
+  executions         Execution[]
+  feedbacks          Feedback[]
+  durableJobs        DurableJob[]
+  streamEvents       UserStreamEvent[]
+  auditLogsAsActor   AuditLog[]        @relation("AuditLogActor")
+  auditLogsAsTarget  AuditLog[]        @relation("AuditLogTarget")
+
+  @@index([status])
+  @@map("users")
+}
+
+model Invitation {
+  id              String   @id @default(uuid()) @db.Uuid
+  emailNormalized String   @map("email_normalized")
+  tokenHash       String   @unique @map("token_hash")
+  role            String   @default("MEMBER")
+  status          String   @default("PENDING")
+  invitedByUserId String?  @map("invited_by_user_id") @db.Uuid
+  expiresAt       DateTime @map("expires_at") @db.Timestamptz
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  invitedByUser User? @relation("UserInvitations", fields: [invitedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([expiresAt])
+  @@map("invitations")
+}
+
+model EmailToken {
+  id              String    @id @default(uuid()) @db.Uuid
+  tokenHash       String    @unique @map("token_hash")
+  otpHash         String?   @map("otp_hash")
+  deliveryChannel String    @map("delivery_channel")
+  subjectUserId   String?   @map("subject_user_id") @db.Uuid
+  subjectEmail    String?   @map("subject_email")
+  purpose         String
+  expiresAt       DateTime  @map("expires_at") @db.Timestamptz
+  usedAt          DateTime? @map("used_at") @db.Timestamptz
+  attempts        Int       @default(0)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  subjectUser User? @relation(fields: [subjectUserId], references: [id], onDelete: Cascade)
+
+  @@index([purpose, tokenHash])
+  @@index([expiresAt])
+  @@map("email_tokens")
+}
+
+model Session {
+  id            String    @id
+  userId        String    @map("user_id") @db.Uuid
+  mfaVerifiedAt DateTime? @map("mfa_verified_at") @db.Timestamptz
+  reauthAt      DateTime  @default(now()) @map("reauth_at") @db.Timestamptz
+  revokedAt     DateTime? @map("revoked_at") @db.Timestamptz
+  expiresAt     DateTime  @map("expires_at") @db.Timestamptz
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model MfaTotp {
+  id                String    @id @default(uuid()) @db.Uuid
+  userId            String    @unique @map("user_id") @db.Uuid
+  secretCiphertext  String    @map("secret_ciphertext")
+  lastUsedTimestep  BigInt?   @map("last_used_timestep")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("mfa_totp")
+}
+
+model RecoveryCode {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  codeHash  String    @unique @map("code_hash")
+  usedAt    DateTime? @map("used_at") @db.Timestamptz
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("recovery_codes")
+}
+
+model Chat {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  slot      Int      @db.SmallInt
+  title     String   @default("New Question")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  state        ChatState?
+  messages     Message[]
+  durableJobs  DurableJob[]
+  streamEvents UserStreamEvent[]
+
+  @@unique([userId, slot])
+  @@map("chats")
+}
+
+model ChatState {
+  chatId    String   @id @map("chat_id") @db.Uuid
+  uiState   Json     @default("{}") @map("ui_state")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@map("chat_state")
+}
+
+model Message {
+  id        String   @id @default(uuid()) @db.Uuid
+  chatId    String   @map("chat_id") @db.Uuid
+  parentId  String?  @map("parent_id") @db.Uuid
+  role      String
+  content   String
+  status    String   @default("SENT")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  chat        Chat         @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  parent      Message?     @relation("MessageHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Message[]    @relation("MessageHierarchy")
+  attachments Attachment[]
+  analysis    Analysis?
+  executions  Execution[]
+  feedbacks   Feedback[]
+
+  @@index([chatId, createdAt])
+  @@map("messages")
+}
+
+model Attachment {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String   @map("user_id") @db.Uuid
+  messageId        String?  @map("message_id") @db.Uuid
+  storageKey       String   @unique @map("storage_key")
+  originalFileName String   @map("original_file_name")
+  safeDisplayName  String   @map("safe_display_name")
+  mimeType         String   @map("mime_type")
+  sizeBytes        BigInt   @map("size_bytes")
+  sha256           String
+  scanStatus       String   @default("PENDING") @map("scan_status")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message Message? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([messageId])
+  @@index([sha256])
+  @@map("attachments")
+}
+
+model Analysis {
+  id                 String   @id @default(uuid()) @db.Uuid
+  messageId          String   @unique @map("message_id") @db.Uuid
+  modelId            String   @map("model_id")
+  promptVersion      String   @map("prompt_version")
+  result             Json
+  verificationStatus String   @default("UNVERIFIED") @map("verification_status")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  message     Message      @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  executions  Execution[]
+  durableJobs DurableJob[]
+
+  @@map("analyses")
+}
+
+model Execution {
+  id             String    @id @default(uuid()) @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  analysisId     String?   @map("analysis_id") @db.Uuid
+  messageId      String?   @map("message_id") @db.Uuid
+  codeHash       String    @map("code_hash")
+  javaVersion    String    @map("java_version")
+  runnerProvider String    @map("runner_provider")
+  status         String
+  stdout         String?
+  stderr         String?
+  exitCode       Int?      @map("exit_code")
+  timeMs         Int?      @map("time_ms")
+  memoryKb       Int?      @map("memory_kb")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  analysis Analysis? @relation(fields: [analysisId], references: [id], onDelete: SetNull)
+  message  Message?  @relation(fields: [messageId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([codeHash])
+  @@map("executions")
+}
+
+model Feedback {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  messageId String   @map("message_id") @db.Uuid
+  vote      Int      @db.SmallInt
+  reasons   String[] @default([])
+  comment   String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, messageId])
+  @@map("feedback")
+}
+
+model DurableJob {
+  id             String    @id @default(uuid()) @db.Uuid
+  queue          String
+  status         String    @default("PENDING")
+  stage          String?
+  userId         String?   @map("user_id") @db.Uuid
+  chatId         String?   @map("chat_id") @db.Uuid
+  analysisId     String?   @map("analysis_id") @db.Uuid
+  correlationId  String    @map("correlation_id")
+  attempts       Int       @default(0)
+  maxAttempts    Int       @default(3) @map("max_attempts")
+  dedupeKey      String?   @map("dedupe_key")
+  leaseOwner     String?   @map("lease_owner")
+  leaseExpiresAt DateTime? @map("lease_expires_at") @db.Timestamptz
+  progress       Int       @default(0)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  startedAt      DateTime? @map("started_at") @db.Timestamptz
+  finishedAt     DateTime? @map("finished_at") @db.Timestamptz
+
+  user         User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  chat         Chat?             @relation(fields: [chatId], references: [id], onDelete: SetNull)
+  analysis     Analysis?         @relation(fields: [analysisId], references: [id], onDelete: SetNull)
+  streamEvents UserStreamEvent[]
+
+  @@index([queue, status])
+  @@index([leaseExpiresAt])
+  @@map("durable_jobs")
+}
+
+model UserStreamEvent {
+  streamSeq   BigInt   @id @default(autoincrement()) @map("stream_seq")
+  jobEventSeq Int?     @map("job_event_seq")
+  userId      String   @map("user_id") @db.Uuid
+  chatId      String?  @map("chat_id") @db.Uuid
+  jobId       String?  @map("job_id") @db.Uuid
+  eventType   String   @map("event_type")
+  payload     Json
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chat Chat?       @relation(fields: [chatId], references: [id], onDelete: SetNull)
+  job  DurableJob? @relation(fields: [jobId], references: [id], onDelete: SetNull)
+
+  @@index([userId, streamSeq])
+  @@index([chatId, createdAt])
+  @@map("user_stream_events")
+}
+
+model IdempotencyRecord {
+  key             String
+  principalId     String   @map("principal_id")
+  route           String
+  requestHash     String   @map("request_hash")
+  responsePayload Json     @map("response_payload")
+  statusCode      Int      @map("status_code")
+  expiresAt       DateTime @map("expires_at") @db.Timestamptz
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@id([principalId, key])
+  @@index([expiresAt])
+  @@map("idempotency_records")
+}
+
+model AuditLog {
+  id              String   @id @default(uuid()) @db.Uuid
+  actorUserId     String?  @map("actor_user_id") @db.Uuid
+  targetUserId    String?  @map("target_user_id") @db.Uuid
+  actorPseudonym  String   @map("actor_pseudonym")
+  actorType       String   @map("actor_type")
+  actorRoleAtTime String?  @map("actor_role_at_time")
+  action          String
+  targetMetadata  Json     @default("{}") @map("target_metadata")
+  ipAddress       String?  @map("ip_address")
+  occurredAt      DateTime @default(now()) @map("occurred_at") @db.Timestamptz
+
+  actorUser  User? @relation("AuditLogActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  targetUser User? @relation("AuditLogTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+
+  @@index([occurredAt(sort: Desc)])
+  @@index([actorUserId, occurredAt(sort: Desc)])
+  @@index([targetUserId, occurredAt(sort: Desc)])
+  @@index([action])
+  @@map("audit_logs")
+}

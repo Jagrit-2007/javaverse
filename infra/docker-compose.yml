@@ -1,0 +1,95 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: javaverse-postgres
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:5432:5432'
+    environment:
+      POSTGRES_USER: javaverse
+      POSTGRES_PASSWORD: javaverse
+      POSTGRES_DB: javaverse
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init-extensions.sql:/docker-entrypoint-initdb.d/init-extensions.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U javaverse -d javaverse']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis-queue:
+    image: redis:7-alpine
+    container_name: javaverse-redis-queue
+    restart: unless-stopped
+    command: redis-server --appendonly yes --appendfsync everysec --maxmemory 256mb --maxmemory-policy noeviction
+    ports:
+      - '127.0.0.1:6379:6379'
+    volumes:
+      - redis_queue_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis-cache:
+    image: redis:7-alpine
+    container_name: javaverse-redis-cache
+    restart: unless-stopped
+    command: redis-server --save "" --appendonly no --maxmemory 128mb --maxmemory-policy allkeys-lru
+    ports:
+      - '127.0.0.1:6380:6379'
+    volumes:
+      - redis_cache_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: javaverse-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - '127.0.0.1:9000:9000'
+      - '127.0.0.1:9001:9001'
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -f http://localhost:9000/minio/health/live || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: javaverse-mailpit
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:1025:1025'
+      - '127.0.0.1:8025:8025'
+    volumes:
+      - mailpit_data:/data
+
+  clamav:
+    image: clamav/clamav:stable
+    container_name: javaverse-clamav
+    profiles: ['uploads']
+    ports:
+      - '127.0.0.1:3310:3310'
+    volumes:
+      - clamav_signatures:/var/lib/clamav
+
+volumes:
+  postgres_data:
+  redis_queue_data:
+  redis_cache_data:
+  minio_data:
+  mailpit_data:
+  clamav_signatures:
