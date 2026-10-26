@@ -1,0 +1,28 @@
+{
+  "name": "javaverse",
+  "private": true,
+  "packageManager": "pnpm@12.15.0",
+  "engines": {
+    "node": ">=24.22.1",
+    "pnpm": ">=12.15.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,mjs,json,md,yml,yaml}\"",
+    "format": "prettier --write \"**/*.{ts,tsx,js,mjs,json,md,yml,yaml}\"",
+    "test:clean-db": "node scripts/verify-clean-db.mjs",
+    "generate-env": "node scripts/generate-env-local.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "eslint": "^9.20.0",
+    "prettier": "^3.5.0",
+    "turbo": "^2.11.10",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.72.0"
+  }
+}

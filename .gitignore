@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Next.js & Turbo
+.next/
+out/
+.turbo/
+next-env.d.ts
+
+# Environment files
+.env
+.env*.local
+!.env.example
+
+# Build outputs
+dist/
+build/
+coverage/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker / DB dumps
+*.db
+*.sqlite
+*.dump
+*.sql.gz
+
+# Uploads
+uploads/
