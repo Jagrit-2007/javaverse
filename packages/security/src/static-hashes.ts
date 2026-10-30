@@ -15,5 +15,5 @@ export const STATIC_ROUTE_SCRIPT_HASHES: string[] = [
   "'sha256-fVHnpxFBPfeCW5Iyn8jpfQKQ5xjogtVeZQC9IePDdyk='",
   "'sha256-gxEzoZq2LGK6PkV5Jor6azyCg5gx+4PyshzOs8Nueo4='",
   "'sha256-pX8KdEhQfWf3WSxgskQdzGDT7GX1h70UVUNcrVwFfoc='",
-  "'sha256-zgHkXiqqc3eTv9LMjKQapFTlEREcZMBuA8ALLR2YvVY='"
+  "'sha256-zgHkXiqqc3eTv9LMjKQapFTlEREcZMBuA8ALLR2YvVY='",
 ];

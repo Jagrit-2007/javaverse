@@ -1,7 +1,8 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import prettier from 'prettier';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -43,7 +44,13 @@ export const STATIC_THEME_SCRIPT_HASH = "${THEME_SCRIPT_HASH.replace(/'/g, "\\'"
 export const STATIC_ROUTE_SCRIPT_HASHES: string[] = ${JSON.stringify(sortedHashes, null, 2)};
 `;
 
-fs.writeFileSync(outputFile, fileContent, 'utf8');
+const prettierConfig = (await prettier.resolveConfig(outputFile)) || {};
+const formattedContent = await prettier.format(fileContent, {
+  ...prettierConfig,
+  filepath: outputFile,
+});
+
+fs.writeFileSync(outputFile, formattedContent, 'utf8');
 console.log(`Extracted ${sortedHashes.length} static inline script hashes to ${outputFile}`);
 
 // Also update .env.local for zero-latency runtime consumption by middleware
