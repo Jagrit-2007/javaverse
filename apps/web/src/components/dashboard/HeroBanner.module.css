@@ -1,0 +1,204 @@
+.heroSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  padding: var(--space-4);
+  box-shadow: var(--elevation-low);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+@media (min-width: 640px) {
+  .heroSection {
+    padding: var(--space-6);
+    gap: var(--space-6);
+  }
+}
+
+@media (min-width: 768px) {
+  .heroSection {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-8);
+  }
+}
+
+.heroText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 1;
+  max-width: 620px;
+}
+
+@media (min-width: 640px) {
+  .heroText {
+    gap: var(--space-3);
+  }
+}
+
+.greeting {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.headline {
+  font-size: var(--text-2xl);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  line-height: var(--leading-tight);
+}
+
+@media (min-width: 640px) {
+  .headline {
+    font-size: var(--text-3xl);
+  }
+}
+
+.subheadline {
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  line-height: var(--leading-normal);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+}
+
+.primaryAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: 0 var(--space-5);
+  background-color: var(--action-primary-bg);
+  color: var(--action-primary-text);
+  font-weight: 700;
+  font-size: var(--text-sm);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  transition: background-color var(--transition-fast), transform var(--transition-fast);
+}
+
+.primaryAction:hover {
+  background-color: var(--action-primary-hover);
+}
+
+.primaryAction:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.secondaryAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: 0 var(--space-5);
+  background-color: var(--action-secondary-bg);
+  color: var(--action-secondary-text);
+  border: 1px solid var(--action-secondary-border);
+  font-weight: 600;
+  font-size: var(--text-sm);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.secondaryAction:hover {
+  background-color: var(--action-secondary-hover);
+  border-color: var(--border-strong);
+}
+
+.secondaryAction:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.heroVisual {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.visualCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  background-color: var(--bg-surface-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  max-width: 260px;
+}
+
+@media (min-width: 640px) {
+  .visualCard {
+    gap: var(--space-3);
+    padding: var(--space-4);
+    max-width: 280px;
+  }
+}
+
+.visualMotto {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.mottoMain {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.mottoSub {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.illustration {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.illustration svg {
+  width: auto;
+  height: 110px; /* ~27% reduction from 150px on mobile */
+  max-width: 100%;
+}
+
+@media (min-width: 640px) {
+  .illustration svg {
+    height: 150px;
+  }
+}
+
+.badgeRow {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.microBadge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.15rem var(--space-2);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+}

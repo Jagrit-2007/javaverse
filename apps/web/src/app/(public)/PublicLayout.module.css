@@ -1,0 +1,243 @@
+.publicWrapper {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.header {
+  border-bottom: 1px solid var(--border-subtle);
+  background-color: var(--bg-surface);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.headerInner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-2) var(--space-3);
+  min-height: 64px;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+@media (min-width: 640px) {
+  .headerInner {
+    flex-wrap: nowrap;
+    height: 64px;
+    padding: 0 var(--space-4);
+  }
+}
+
+@media (min-width: 768px) {
+  .headerInner {
+    padding: 0 var(--space-6);
+    height: 72px;
+    gap: var(--space-4);
+  }
+}
+
+.logoLink {
+  text-decoration: none;
+  display: inline-flex;
+}
+
+.logoLink:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 4px;
+}
+
+.nav {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .nav {
+    display: flex;
+  }
+}
+
+.navList {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.navLink {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+.navLink:hover {
+  color: var(--text-primary);
+}
+
+.navLink:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.dashboardBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 var(--space-2);
+  background-color: var(--action-primary-bg);
+  color: var(--action-primary-text);
+  font-size: 0.72rem;
+  font-weight: 700;
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color var(--transition-fast);
+}
+
+@media (min-width: 480px) {
+  .dashboardBtn {
+    min-height: 40px;
+    padding: 0 var(--space-3);
+    font-size: var(--text-xs);
+  }
+}
+
+@media (min-width: 640px) {
+  .dashboardBtn {
+    min-height: 44px;
+    padding: 0 var(--space-4);
+    font-size: var(--text-sm);
+  }
+}
+
+.dashboardBtn:hover {
+  background-color: var(--action-primary-hover);
+}
+
+.dashboardBtn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.mainContent {
+  flex: 1;
+}
+
+.footer {
+  background-color: var(--bg-surface);
+  border-top: 1px solid var(--border-subtle);
+  padding-top: var(--space-12);
+  padding-bottom: var(--space-8);
+}
+
+.footerInner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 var(--space-3);
+  width: 100%;
+  min-width: 0;
+}
+
+@media (min-width: 768px) {
+  .footerInner {
+    flex-direction: row;
+    justify-content: space-between;
+    padding: 0 var(--space-6);
+  }
+}
+
+.footerBrand {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: 360px;
+}
+
+.footerTagline {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  line-height: var(--leading-relaxed);
+}
+
+.footerNav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-10);
+}
+
+.footerNavCol {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.footerColTitle {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-primary);
+}
+
+.footerList {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+}
+
+.footerList a {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+.footerList a:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
+
+.footerList a:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.footerBottom {
+  max-width: 1200px;
+  margin: var(--space-8) auto 0;
+  padding: var(--space-6) var(--space-3) 0;
+  border-top: 1px solid var(--border-subtle);
+  width: 100%;
+  min-width: 0;
+}
+
+@media (min-width: 768px) {
+  .footerBottom {
+    padding: var(--space-6) var(--space-6) 0;
+  }
+}
+
+.copyright {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}

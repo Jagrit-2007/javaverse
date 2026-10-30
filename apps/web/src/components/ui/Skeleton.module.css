@@ -1,0 +1,20 @@
+.skeleton {
+  background-color: var(--border-subtle);
+  animation: pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none !important;
+    opacity: 0.5 !important;
+  }
+}
