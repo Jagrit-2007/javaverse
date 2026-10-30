@@ -54,3 +54,48 @@ Status: Approved & Implemented
    - Correlation IDs generated via standard UUIDv4 and propagated through `AsyncLocalStorage` and HTTP request/response headers (`x-correlation-id`).
    - Liveness endpoint (`/api/v1/health`) completely uncoupled from external databases and queues.
    - Readiness endpoint (`/api/v1/readiness`) monitors PostgreSQL (critical), Redis Queue (critical), and Redis Cache (non-critical), returning HTTP 503 on critical dependency failure.
+
+## Phase 2 Ratified Decisions
+
+Status: Approved & Implemented
+
+1. **Design Tokens & Strict Contrast Floor**:
+   - Primary action CTA button uses dark ink (`#111827`) on warm amber (`#f59e0b`) background to achieve 8.2:1 contrast ratio, surpassing both WCAG 2.2 AA (4.5:1) and AAA (7:1).
+   - Secondary link colors use `#b45309` (4.6:1) and `#0369a1` (7.3:1) on white surfaces to eliminate low-contrast amber text failures.
+   - Literal breakpoints (`768px`, `1024px`, `1280px`) used in CSS media queries because CSS custom properties are not evaluated inside `@media` declarations.
+   - Natural 320 CSS pixel reflow achieved using responsive flex/grid layouts, `min-width: 0`, and `overflow-wrap: anywhere` without global `overflow-x: hidden`.
+
+2. **Deterministic Theme Resolution & Flash Prevention**:
+   - Default theme resolves to Light if no user preference is stored.
+   - Explicit stored `light` resolves to Light; explicit stored `dark` resolves to Dark; explicit stored `system` follows `prefers-color-scheme`.
+   - The OS `prefers-color-scheme` `change` event listener is active only when `system` is selected and is dismantled when an explicit theme is chosen.
+   - First-paint theme flash is eliminated via a synchronous inline `<script>` whose sha256 hash is verified in CSP headers.
+
+3. **Original Geometric Branding**:
+   - Replaced coffee-cup and Oracle/Duke branding with an original faceted geometric crystal mark featuring an embedded amber energy spark core.
+   - Implemented natively in React (`Logo.tsx`) and static SVG (`/icon.svg`) with verified visual clarity at 16, 24, 32, and 40px dimensions.
+
+4. **Segregated Content Security Policy (CSP)**:
+   - Public marketing routes enforce static hash-based script CSP, enabling Next.js Turbopack to pre-render static HTML without `'unsafe-inline'`.
+   - Dashboard preview routes enforce dynamic per-request cryptographic nonces and send `Cache-Control: no-store`.
+   - Build-time hash extractor script (`scripts/extract-static-hashes.mjs`) automatically keeps static hashes synchronized across package boundaries with zero console violations.
+
+5. **Gated Fixture State Harness**:
+   - The screenshot and preview state mechanism (loading skeletons, empty states, error cards) is strictly gated behind `E2E_FIXTURES_ENABLED=true`.
+   - Production builds and public deployments reject or ignore fixture query parameters to prevent diagnostic/debug backdoors.
+
+6. **Native Accessibility Primitives**:
+   - Native `<dialog>` used for mobile navigation drawer and hint modals, implementing `showModal`, backdrop dismissal, Escape key handling, and focus restoration.
+   - Native `<select>` used for theme selection to ensure bulletproof screen reader and keyboard interoperability.
+   - Strictly semantic controls: navigation uses `<Link>` and actions use `<button>`, with zero fake disabled links or non-semantic anchor buttons.
+
+7. **Deterministic Fixtures & Demo Shell Boundary**:
+   - `/dashboard` and `/dashboard/*` operate honestly as static/fixture preview shells without fabricated sessions, dummy account menus, or fake sign-out buttons.
+   - Copy uses deterministic generic text: `“Welcome back, learner. Let’s make Java click today.”` without personal names or time-of-day bindings.
+
+8. **Visual & Copy Polish Refinements**:
+   - Replaced "Free Plan Demo" with "Preview Workspace" to clearly reflect demo workspace context without premature plan assumptions.
+   - Replaced motivation quote attribution with original JavaVerse product copy presented as an active learning note badge.
+   - Shortcut descriptions and featured path primary titles display completely with multi-line clamping and zero ellipsis truncation.
+   - Improved mobile density below 640px (compact hero padding, 27% illustration height reduction) and accounted for fixed mobile bottom navigation clearance via `env(safe-area-inset-bottom)`.
+   - Used "View Demo Dashboard" consistently across header and hero CTAs, verified public curriculum navigation to `/learn`, and added semantic screen-reader descriptions for visual concept inheritance diagrams.
