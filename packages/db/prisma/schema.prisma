@@ -25,6 +25,7 @@ model User {
   status          String    @default("ACTIVE")
   emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamptz
   consentImprove  Boolean   @default(false) @map("consent_improve")
+  displayName     String?   @map("display_name") @db.VarChar(64)
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -85,17 +86,20 @@ model EmailToken {
 
 model Session {
   id            String    @id
+  publicId      String    @unique @default(uuid()) @map("public_id") @db.Uuid
   userId        String    @map("user_id") @db.Uuid
   mfaVerifiedAt DateTime? @map("mfa_verified_at") @db.Timestamptz
   reauthAt      DateTime  @default(now()) @map("reauth_at") @db.Timestamptz
   revokedAt     DateTime? @map("revoked_at") @db.Timestamptz
   expiresAt     DateTime  @map("expires_at") @db.Timestamptz
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  lastSeenAt    DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])
+  @@index([lastSeenAt])
   @@map("sessions")
 }
 

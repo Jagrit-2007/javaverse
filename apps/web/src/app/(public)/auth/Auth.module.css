@@ -1,0 +1,110 @@
+.authContainer {
+  min-height: calc(100vh - 140px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-8) var(--space-4);
+}
+
+.authCard {
+  width: 100%;
+  max-width: 440px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-8);
+  box-shadow: var(--elevation-medium);
+}
+
+.authHeader {
+  margin-bottom: var(--space-6);
+  text-align: center;
+}
+
+.authTitle {
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: var(--space-2);
+}
+
+.authSubtitle {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: var(--leading-relaxed);
+}
+
+.authForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.alertBox {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  margin-bottom: var(--space-4);
+}
+
+.alertError {
+  background-color: var(--status-danger-bg);
+  border: 1px solid rgba(127, 29, 29, 0.3);
+  color: var(--status-danger-text);
+}
+
+.alertSuccess {
+  background-color: var(--status-success-bg);
+  border: 1px solid rgba(20, 83, 45, 0.3);
+  color: var(--status-success-text);
+}
+
+.authFooter {
+  margin-top: var(--space-6);
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.authLink {
+  color: var(--brand-amber);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-weight: 500;
+}
+
+.authLink:hover {
+  color: var(--text-primary);
+}
+
+.totpSecretDisplay {
+  background-color: var(--bg-surface-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  word-break: break-all;
+  user-select: all;
+  text-align: center;
+  margin: var(--space-2) 0;
+}
+
+.recoveryCodesGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-2);
+  margin: var(--space-4) 0;
+}
+
+.recoveryCodeItem {
+  background-color: var(--bg-surface-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-align: center;
+  user-select: all;
+}

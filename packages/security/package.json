@@ -9,6 +9,10 @@
     ".": "./src/index.ts",
     "./csp": "./src/csp.ts"
   },
+  "dependencies": {
+    "@node-rs/argon2": "2.2.2",
+    "otpauth": "9.5.2"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/",

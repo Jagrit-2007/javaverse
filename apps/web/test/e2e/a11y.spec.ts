@@ -8,6 +8,15 @@ const ALL_ROUTES = [
   '/privacy',
   '/terms',
   '/contact',
+  '/auth/login',
+  '/auth/bootstrap',
+  '/auth/mfa',
+  '/auth/recovery',
+  '/auth/invite',
+  '/auth/forgot-password',
+  '/auth/reset-password',
+  '/auth/verify-email',
+  '/auth/suspended',
   '/dashboard',
   '/dashboard/learn',
   '/dashboard/practice',
@@ -16,6 +25,7 @@ const ALL_ROUTES = [
   '/dashboard/progress',
   '/dashboard/notes',
   '/dashboard/settings',
+  '/dashboard/settings/security',
 ];
 
 test.describe('Automated Accessibility Scans (@axe-core/playwright)', () => {

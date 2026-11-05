@@ -1,18 +1,24 @@
 import { describe, it, expect } from 'vitest';
-import { hashToken, timingSafeCompare } from '../src/tokens';
+import {
+  generateRandomToken,
+  hashToken,
+  timingSafeCompare,
+  verifyTokenDigest,
+} from '../src/tokens';
 
 describe('Token hashing & comparison', () => {
   const secret = 'test-secret-key-32-characters-long!';
+  const fallbackSecret = 'previous-secret-key-32-characters!';
   const token = 'sample-random-token-value';
 
-  it('generates consistent HMAC-SHA-256 hashes for same domain and input', () => {
+  it('generates consistent HMAC-SHA-256 hashes for same purpose and input', () => {
     const hash1 = hashToken(token, secret, 'invitation');
     const hash2 = hashToken(token, secret, 'invitation');
     expect(hash1).toBe(hash2);
     expect(hash1).toHaveLength(64);
   });
 
-  it('produces different hashes across different domains (domain separation)', () => {
+  it('produces different hashes across different purposes (domain separation)', () => {
     const inviteHash = hashToken(token, secret, 'invitation');
     const resetHash = hashToken(token, secret, 'password_reset');
     const bootstrapHash = hashToken(token, secret, 'owner_bootstrap');
@@ -20,6 +26,11 @@ describe('Token hashing & comparison', () => {
     expect(inviteHash).not.toBe(resetHash);
     expect(inviteHash).not.toBe(bootstrapHash);
     expect(resetHash).not.toBe(bootstrapHash);
+  });
+
+  it('generates random tokens of specified byte length', () => {
+    const tok = generateRandomToken(32);
+    expect(tok).toHaveLength(64); // 32 bytes in hex = 64 chars
   });
 
   it('compares identical hashes accurately with timingSafeCompare', () => {
@@ -32,5 +43,30 @@ describe('Token hashing & comparison', () => {
     const hash2 = hashToken('different-token', secret, 'session');
     expect(timingSafeCompare(hash1, hash2)).toBe(false);
     expect(timingSafeCompare(hash1, 'invalid')).toBe(false);
+  });
+
+  it('verifies candidate tokens against primary and fallback keys for key rotation', () => {
+    const oldHash = hashToken(token, fallbackSecret, 'password_reset');
+    const currentHash = hashToken(token, secret, 'password_reset');
+
+    // Matches primary
+    const res1 = verifyTokenDigest(token, currentHash, secret, 'password_reset', fallbackSecret);
+    expect(res1.valid).toBe(true);
+    expect(res1.requiresRehash).toBe(false);
+
+    // Matches fallback
+    const res2 = verifyTokenDigest(token, oldHash, secret, 'password_reset', fallbackSecret);
+    expect(res2.valid).toBe(true);
+    expect(res2.requiresRehash).toBe(true);
+
+    // Mismatched token
+    const res3 = verifyTokenDigest(
+      'wrong-token',
+      currentHash,
+      secret,
+      'password_reset',
+      fallbackSecret,
+    );
+    expect(res3.valid).toBe(false);
   });
 });

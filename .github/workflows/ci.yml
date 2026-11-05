@@ -38,6 +38,12 @@ jobs:
       - name: Run unit tests
         run: pnpm test
 
+      - name: Build production application
+        run: pnpm build
+
+      - name: Run Lighthouse Production Audit
+        run: pnpm test:lighthouse
+
       - name: Run Gitleaks Secret Scanner
         uses: gitleaks/gitleaks-action@v2
         env:

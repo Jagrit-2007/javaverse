@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 2 — Design System & Shell
+Phase 3 — Authentication & Account Security (Complete, awaiting review)
 
 ## Phase 0 Status
 
@@ -107,10 +107,57 @@ PASS — all criteria verified and passing
    - Added semantic accessible description for class hierarchy visualization.
    - Preserved all Phase 1 foundations, database schemas, worker, and security policies.
 
+## Phase 3 Status
+
+PASS — all criteria verified and passing
+
+## Phase 3 Evidence & Verification Summary
+
+1. **Approved Dependencies & Lockfile**:
+   - Installed `@node-rs/argon2` (2.2.2), `otpauth` (9.5.2), and `nodemailer` (10.3.1) in accordance with Phase 3 specification.
+   - Verified `pnpm install --frozen-lockfile` runs cleanly with zero discrepancies.
+   - Documented all third-party licences in `LICENSES.md`.
+
+2. **Database Hardening Migration (`auth_hardening`)**:
+   - Migration `20261030151351_auth_hardening` safely introduces `users.display_name`, `sessions.public_id` (backfilled before NOT NULL with unique index), and `sessions.last_seen_at` (with active session and cleanup indexes).
+   - Clean scratch database deployment verified via `node scripts/verify-clean-db.mjs` with idempotent re-seeding and invariant checks.
+
+3. **Owner CLI Bootstrap State Machine**:
+   - CLI command `pnpm bootstrap:owner` generates single-use 64-character token with 15-minute TTL delivered exclusively to terminal stdout.
+   - Multi-step interruption-safe ceremony at `/auth/bootstrap`:
+     - Step 1: Validates token against purpose `OWNER_BOOTSTRAP` and delivery channel `TERMINAL`, issuing short-lived encrypted ticket.
+     - Step 2: Enrolls credentials, displays Base32 TOTP secret, and validates TOTP code before database account creation.
+     - Step 3: Atomic database transaction creates single active OWNER, encrypted TOTP record, last-used timestep, 10 single-use recovery code hashes, session, and audit records.
+     - Step 4: Displays 10 plaintext recovery codes exactly once with mandatory confirmation checkbox.
+
+4. **Member Invitation & Concurrency Controls**:
+   - Single shared invitation service (`apps/web/src/lib/invitations.ts`) enforces workspace seat limits under transaction-scoped PostgreSQL advisory locks (`pg_advisory_xact_lock(74619283)`), completely serializing capacity checks across concurrent requests.
+   - Segregated invitation creation (`PENDING_EXISTS` on duplicate active invite) and resend (revokes stale token and re-issues fresh token under lock, preserving seat count).
+   - Ephemeral in-memory token generation; transactional email delivery via Mailpit is deferred until after database commit, with token confined to URL hash fragment (`#token=...`).
+
+5. **Session Management & Defense in Depth**:
+   - Opaque sessions: 256-bit raw token in cookie, HMAC-SHA256 digest in database, UUIDv4 public ID in JSON APIs.
+   - Fixed 7-day absolute expiration; 24-hour idle expiration updated at 5-minute threshold without extending absolute expiry.
+   - Revoking other sessions requires recent reauthentication (within 15 minutes); revoking current session behaves as logout.
+   - CSRF protection: signed session-bound and flow-bound tokens.
+   - Fail-closed token-bucket rate limiting via Redis Cache during outages on sensitive endpoints.
+   - Audit logging with non-reversible HMAC-SHA-256 pseudonyms and UUID-validated metadata allowlist (`revoked_session_public_id`, `previous_invitation_id`, `new_invitation_id`).
+   - RFC 6265bis cookie policy: `__Host-` prefix with `Path=/`, `HttpOnly`, `SameSite=Lax`, `Secure`.
+
+6. **Comprehensive Automated Verification & Supply-Chain Remediation**:
+   - Phase 3 Security Repairs verified: Advisory-locked seat-cap race resolved; Prettier format check passed; Audit metadata allowlist UUID validation added; Synthetic Gitleaks test fixture replaced.
+   - Supply-Chain Hardening: `@lhci/cli` removed from workspace dependencies, eradicating all 5 High transitive vulnerabilities; Lighthouse audits containerized via pinned image `patrickhulce/lhci-client:0.15.1@sha256:558210c5e422a7babaaa09c285b7469da3f00fac1a9880c37883c65d666a7fc9` (`pnpm test:lighthouse`) with 100% pass across all mobile budgets for `/` and `/dashboard`.
+   - Gitleaks Policy Hardened: Broad directory allowlists (`^apps/web/test/.*`, `^packages/schemas/test/.*`) eliminated in favor of exact file paths (`setup.ts`, `auth.spec.ts`, `env.test.ts`). All scans clean.
+   - Unit & integration tests: 12/12 suites passing in `@javaverse/web` (38 tests), 100% across all 8 packages.
+   - Concurrency tests: OWNER partial index uniqueness, 10-caller invitation seat cap lock race, 5-caller same-email race, and resend token lifecycle passing against real PostgreSQL.
+   - Playwright E2E & Accessibility: 66/66 tests passing, including complete browser auth flows and 0 axe-core WCAG 2.2 AA violations across all 15 public and authenticated routes.
+   - Production build: `pnpm build` completed with automatic static script hash extraction for all static and auth routes.
+   - Security scanning: Zero Critical, Zero High findings across full `pnpm audit` and unfiltered OSV-Scanner; 0 issues on filtered OSV-Scanner; 0 leaks across history, protect, and `--no-git` on pinned Gitleaks v8.30.1.
+
 ## Current Objective
 
-Await owner review and authorization before proceeding to Phase 3 (Authentication & Session Architecture).
+Await owner review and authorization before proceeding to Phase 4 (Chat, Streaming & Core Learning Experience).
 
 ## Blockers
 
-None.
+None. Supply-chain remediation and Phase 3 security repairs verified.

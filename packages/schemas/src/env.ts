@@ -18,17 +18,22 @@ export const EnvSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
     PORT: z.coerce.number().default(3000),
+    APP_URL: z.string().url().default('http://localhost:3000'),
 
     DATABASE_URL: z.string().url().min(1),
     REDIS_QUEUE_URL: z.string().url().min(1),
     REDIS_CACHE_URL: z.string().url().min(1),
 
     SESSION_SECRET: z.string().min(32),
+    APP_MASTER_KEY: z.string().min(32).optional(),
+    PREVIOUS_APP_MASTER_KEY: z.string().min(32).optional(),
     CURSOR_SIGNING_SECRET: z.string().min(32),
     SANDBOX_SHARED_SECRET: z.string().min(32),
 
     MAX_USERS: z.coerce.number().int().positive().default(5),
     REGISTRATION_MODE: z.enum(['invite_only', 'open', 'closed']).default('invite_only'),
+    TRUSTED_PROXY_IPS: z.string().default(''),
+    HIBP_ENFORCEMENT_MODE: z.enum(['degraded', 'strict']).default('degraded'),
 
     // Future-compatible provider values
     AI_PROVIDER_PRIMARY: z.enum(['mock', 'anthropic', 'gemini']).default('mock'),
@@ -48,6 +53,13 @@ export const EnvSchema = z
     SMTP_HOST: z.string().default('127.0.0.1'),
     SMTP_PORT: z.coerce.number().default(1025),
     SMTP_FROM: z.string().default('noreply@javaverse.local'),
+    EMAIL_FROM: z.string().default('noreply@javaverse.local'),
+    SMTP_USER: z.string().optional(),
+    SMTP_PASSWORD: z.string().optional(),
+    SMTP_SECURE: z
+      .string()
+      .default('false')
+      .transform((val) => val === 'true'),
 
     CLAMAV_HOST: z.string().default('127.0.0.1'),
     CLAMAV_PORT: z.coerce.number().default(3310),

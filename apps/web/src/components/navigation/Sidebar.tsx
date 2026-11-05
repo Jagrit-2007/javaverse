@@ -33,8 +33,23 @@ export const SIDEBAR_NAV_ITEMS: NavItem[] = [
   { label: 'Settings', href: '/dashboard/settings', icon: Settings },
 ];
 
-export function Sidebar() {
+export interface SidebarProps {
+  user?: {
+    displayName: string;
+    role: string;
+  };
+}
+
+export function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname();
+
+  const displayName = user?.displayName || 'Learner';
+  const roleDisplay = user?.role
+    ? user.role === 'OWNER'
+      ? 'Workspace Owner'
+      : 'Learner'
+    : 'Workspace Member';
+  const initial = displayName.charAt(0).toUpperCase();
 
   return (
     <aside className={styles.sidebar} aria-label="Desktop Sidebar Navigation">
@@ -72,11 +87,11 @@ export function Sidebar() {
       <div className={styles.footer}>
         <div className={styles.profileCard}>
           <div className={styles.avatar} aria-hidden="true">
-            L
+            {initial}
           </div>
           <div className={styles.profileInfo}>
-            <span className={styles.profileName}>Learner</span>
-            <span className={styles.profileRole}>Preview Workspace</span>
+            <span className={styles.profileName}>{displayName}</span>
+            <span className={styles.profileRole}>{roleDisplay}</span>
           </div>
         </div>
         <div className={styles.quoteCard} aria-hidden="true">

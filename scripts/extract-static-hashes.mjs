@@ -18,11 +18,26 @@ if (!fs.existsSync(appDir)) {
   process.exit(1);
 }
 
-const files = fs.readdirSync(appDir).filter((f) => f.endsWith('.html'));
+function getAllHtmlFiles(dir) {
+  let results = [];
+  const list = fs.readdirSync(dir);
+  for (const file of list) {
+    const fullPath = path.join(dir, file);
+    const stat = fs.statSync(fullPath);
+    if (stat && stat.isDirectory()) {
+      results = results.concat(getAllHtmlFiles(fullPath));
+    } else if (file.endsWith('.html')) {
+      results.push(fullPath);
+    }
+  }
+  return results;
+}
+
+const files = getAllHtmlFiles(appDir);
 const hashes = new Set([THEME_SCRIPT_HASH]);
 
-for (const file of files) {
-  const html = fs.readFileSync(path.join(appDir, file), 'utf8');
+for (const filePath of files) {
+  const html = fs.readFileSync(filePath, 'utf8');
   const scriptRegex = /<script\b[^>]*>([\s\S]*?)<\/script>/gi;
   let match;
   while ((match = scriptRegex.exec(html)) !== null) {

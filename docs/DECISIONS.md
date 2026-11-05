@@ -99,3 +99,55 @@ Status: Approved & Implemented
    - Shortcut descriptions and featured path primary titles display completely with multi-line clamping and zero ellipsis truncation.
    - Improved mobile density below 640px (compact hero padding, 27% illustration height reduction) and accounted for fixed mobile bottom navigation clearance via `env(safe-area-inset-bottom)`.
    - Used "View Demo Dashboard" consistently across header and hero CTAs, verified public curriculum navigation to `/learn`, and added semantic screen-reader descriptions for visual concept inheritance diagrams.
+
+## Phase 3 Ratified Decisions
+
+Status: Approved & Implemented
+
+1. **Database Schema Hardening & Clean Migration (`auth_hardening`)**:
+   - Added `users.display_name VARCHAR(64)` with generic fallback ("Owner" or "Learner"); never derived from email local part.
+   - Added `sessions.public_id UUID UNIQUE NOT NULL` safely backfilled before NOT NULL constraint; newly created sessions generate public IDs via application-level `crypto.randomUUID()`.
+   - Added `sessions.last_seen_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` with dedicated index for idle session tracking.
+   - Enforced 24-hour idle timeout with 5-minute update threshold (`SESSION_TOUCH_THRESHOLD_MS`) without extending the fixed 7-day absolute `expires_at`.
+   - Added partial index `idx_sessions_user_active` (`WHERE revoked_at IS NULL`) for performant active session queries.
+   - Clean `migrate:deploy` verified against an isolated scratch database.
+
+2. **Cryptographic Key Hierarchy & Separation**:
+   - HKDF key hierarchy derivation from master secret (`SESSION_SECRET` / `APP_MASTER_KEY`) deriving dedicated purpose keys: `sessionHmacKey`, `authTokenHmacKey`, `mfaEncryptionKey`, `csrfSigningKey`, `auditHmacKey`.
+   - Versioned AES-256-GCM TOTP secret encryption with authenticated additional data bound to user ID (`v1:aes-256-gcm:...`).
+   - Constant-time HMAC-SHA256 digests for session tokens, email tokens, and recovery codes; raw values are never persisted in the database or logged.
+
+3. **Owner CLI Bootstrap State Machine**:
+   - Terminal-initiated bootstrap command (`pnpm bootstrap:owner`) prints single-use token with 15-minute TTL delivered to terminal only.
+   - Multi-step interruption-safe browser ceremony (`/auth/bootstrap`):
+     - Step 1: Validates token and issues short-lived encrypted ticket stored in Redis cache.
+     - Step 2: Collects owner credentials, displays Base32 TOTP secret, and verifies TOTP proof before account creation.
+     - Step 3: Atomic database transaction creates OWNER user, TOTP record, last-used timestep, 10 single-use recovery code hashes, session, and audit records.
+     - Step 4: Displays 10 plaintext recovery codes exactly once with confirmation barrier before entering dashboard.
+     - Final token consumption permanently disables subsequent bootstrap.
+
+4. **Member Invitation & Seat Reservation**:
+   - Extracted shared service `apps/web/src/lib/invitations.ts` (`createMemberInvitation`, `resendMemberInvitation`) used by both route handlers (`/api/v1/invitations`, `/api/v1/invitations/resend`) and integration tests.
+   - Strictly enforced deployment limit `MAX_USERS=5` under PostgreSQL transaction-scoped advisory lock:
+     ```sql
+     SELECT pg_advisory_xact_lock(74619283);
+     ```
+     Checking `active_users + pending_invitations < max_users`.
+   - Separate create and resend endpoints; active pending invitation returns `PENDING_EXISTS` on create, while resend revokes previous token and issues a fresh one.
+   - Raw token material is generated ephemerally in application memory; transactional SMTP delivery via Mailpit is deferred until _after_ database transaction commit.
+   - Invitations delivered via transactional email with token in URL hash fragment (`#token=...`) preventing token leakage to referrer headers or server access logs.
+
+5. **Session Management, Rotation & Reauthentication**:
+   - Dual-token session design: 256-bit raw token in cookie, HMAC-SHA256 digest in DB, UUIDv4 public ID in URLs and JSON APIs.
+   - Session revocation requires recent reauthentication (within 15 minutes) when revoking other sessions. Current session revocation behaves as immediate logout.
+   - Absolute session expiry remains strictly unextended; touching `last_seen_at` never extends `expires_at`.
+
+6. **Defense in Depth, Fail-Closed Rate Limiting & Audit Logging**:
+   - CSRF protection: signed session-bound and flow-bound tokens verified across all state-changing endpoints.
+   - Token-bucket rate limiting via Redis Cache with fail-closed behavior on sensitive authentication endpoints in the event of a Redis outage.
+   - Audit logging with non-reversible HMAC-SHA-256 pseudonyms for IP addresses and user IDs.
+   - Strict audit metadata allowlist (`ALLOWED_AUDIT_METADATA_KEYS`) permitting `revoked_session_public_id`, `previous_invitation_id`, and `new_invitation_id` validated strictly as UUIDs (`UUID_METADATA_KEYS`), rejecting PII, raw emails, tokens, or IP addresses.
+   - RFC 6265bis cookie policy: `__Host-` prefix in production with `Path=/`, `HttpOnly`, `SameSite=Lax`, and `Secure`.
+   - Static route script hash extraction recursively captures all `/auth/*` prerendered pages to guarantee strict CSP compliance.
+   - Vulnerability scanning baseline pinned to `zricethezav/gitleaks:v8.30.1` and `ghcr.io/google/osv-scanner:v2.7.0`. Broad Gitleaks allowlists removed in favor of exact file paths (`setup.ts`, `auth.spec.ts`, `env.test.ts`).
+   - Supply-chain hardening: Removed `@lhci/cli` from workspace dependencies to eliminate transitive High findings (`basic-ftp`, `extract-zip`, `tmp`, `zod`); containerized Lighthouse audits via pinned image `patrickhulce/lhci-client:0.15.1@sha256:558210c5e422a7babaaa09c285b7469da3f00fac1a9880c37883c65d666a7fc9` executed via `scripts/audit-lighthouse.mjs` (`pnpm test:lighthouse`). Only `minimatch` in `typescript-eslint` documented with `ignoreUntil = 2026-12-31` in `osv-scanner.toml`. Zero High/Critical findings in full audit or OSV-Scanner.
