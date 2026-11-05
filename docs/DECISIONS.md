@@ -151,3 +151,8 @@ Status: Approved & Implemented
    - Static route script hash extraction recursively captures all `/auth/*` prerendered pages to guarantee strict CSP compliance.
    - Vulnerability scanning baseline pinned to `zricethezav/gitleaks:v8.30.1` and `ghcr.io/google/osv-scanner:v2.7.0`. Broad Gitleaks allowlists removed in favor of exact file paths (`setup.ts`, `auth.spec.ts`, `env.test.ts`).
    - Supply-chain hardening: Removed `@lhci/cli` from workspace dependencies to eliminate transitive High findings (`basic-ftp`, `extract-zip`, `tmp`, `zod`); containerized Lighthouse audits via pinned image `patrickhulce/lhci-client:0.15.1@sha256:558210c5e422a7babaaa09c285b7469da3f00fac1a9880c37883c65d666a7fc9` executed via `scripts/audit-lighthouse.mjs` (`pnpm test:lighthouse`). Only `minimatch` in `typescript-eslint` documented with `ignoreUntil = 2026-12-31` in `osv-scanner.toml`. Zero High/Critical findings in full audit or OSV-Scanner.
+
+7. **Turborepo Environment Contract for Production Builds**:
+   - Explicitly configured `globalEnv: ["NODE_ENV"]` in `turbo.json` for repository-wide environment context.
+   - Forwarded all schema-validated build pipeline environment variables via task-level `tasks.build.env` (including `DATABASE_URL`, `REDIS_*`, `SESSION_SECRET`, `CURSOR_SIGNING_SECRET`, `SANDBOX_SHARED_SECRET`, `ALLOW_LOCAL_SERVICES_IN_PRODUCTION`, `AI_PROVIDER_PRIMARY`, `SANDBOX_PROVIDER`, `SMTP_*`, `APP_URL`, `E2E_FIXTURES_ENABLED`, `STATIC_SCRIPT_HASHES`, etc.).
+   - Prevents Turborepo 2.11 environment filtering from stripping job-level CI environment variables during Next.js page prerendering while preserving strict cache hashing, zero secret persistence in repository config, and fail-fast validation when required variables are missing.
