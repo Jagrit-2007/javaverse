@@ -58,8 +58,8 @@ This inventory documents the open-source licences of direct dependencies and bas
 
 ## Pinned External Security & CI Tools
 
-| Tool / Container Image           | Pinned Tag / Digest                                                      | Licence    | Purpose                                               |
-| :------------------------------- | :----------------------------------------------------------------------- | :--------- | :---------------------------------------------------- |
-| `zricethezav/gitleaks`           | `v8.30.1`                                                                | MIT        | Pinned secret detection scanner (pre-commit & CI)     |
-| `ghcr.io/google/osv-scanner`     | `v2.7.0`                                                                 | Apache-2.0 | Pinned open-source vulnerability scanner              |
-| `patrickhulce/lhci-client`       | `0.15.1@sha256:558210c5e422a7babaaa09c285b7469da3f00fac1a9880c37883c65d666a7fc9` | Apache-2.0 | Containerized Lighthouse CI performance & a11y runner |
+| Tool / Container Image       | Pinned Tag / Digest                                                              | Licence    | Purpose                                               |
+| :--------------------------- | :------------------------------------------------------------------------------- | :--------- | :---------------------------------------------------- |
+| `zricethezav/gitleaks`       | `v8.30.1`                                                                        | MIT        | Pinned secret detection scanner (pre-commit & CI)     |
+| `ghcr.io/google/osv-scanner` | `v2.7.0`                                                                         | Apache-2.0 | Pinned open-source vulnerability scanner              |
+| `patrickhulce/lhci-client`   | `0.15.1@sha256:558210c5e422a7babaaa09c285b7469da3f00fac1a9880c37883c65d666a7fc9` | Apache-2.0 | Containerized Lighthouse CI performance & a11y runner |
