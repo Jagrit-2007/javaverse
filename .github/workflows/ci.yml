@@ -10,6 +10,8 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
+      - name: Start CI infrastructure
+        run: docker compose -f infra/docker-compose.yml up -d postgres redis-queue redis-cache mailpit
       - name: Checkout code
         uses: actions/checkout@v4
         with:
