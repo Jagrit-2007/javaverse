@@ -26,6 +26,9 @@ jobs:
       - name: Verify lockfile reproducibility
         run: pnpm install --frozen-lockfile
 
+      - name: Generate Prisma Client
+        run: pnpm --filter @javaverse/db generate
+
       - name: Check code formatting
         run: pnpm format:check
 
