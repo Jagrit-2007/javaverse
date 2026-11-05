@@ -9,9 +9,24 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    env:
+      CI: 'true'
+      DATABASE_URL: 'postgresql://javaverse:javaverse@127.0.0.1:5432/javaverse?schema=public'
+      REDIS_QUEUE_URL: 'redis://127.0.0.1:6379'
+      REDIS_CACHE_URL: 'redis://127.0.0.1:6380'
+      SESSION_SECRET: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef' # gitleaks:allow
+      APP_MASTER_KEY: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef' # gitleaks:allow
+      CURSOR_SIGNING_SECRET: 'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789' # gitleaks:allow
+      SANDBOX_SHARED_SECRET: 'fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210' # gitleaks:allow
+      ALLOW_LOCAL_SERVICES_IN_PRODUCTION: 'true'
+      AI_PROVIDER_PRIMARY: 'mock'
+      SANDBOX_PROVIDER: 'mock'
+      SMTP_HOST: '127.0.0.1'
+      SMTP_PORT: '1025'
+      SMTP_FROM: 'noreply@javaverse.local'
+      EMAIL_FROM: 'noreply@javaverse.local'
+      APP_URL: 'http://localhost:3000'
     steps:
-      - name: Start CI infrastructure
-        run: docker compose -f infra/docker-compose.yml up -d postgres redis-queue redis-cache mailpit
       - name: Checkout code
         uses: actions/checkout@v4
         with:
@@ -40,7 +55,45 @@ jobs:
       - name: Run strict type checking
         run: pnpm typecheck
 
-      - name: Run unit tests
+      - name: Start CI infrastructure
+        run: docker compose -f infra/docker-compose.yml up -d postgres redis-queue redis-cache mailpit
+
+      - name: Wait for CI infrastructure health
+        run: |
+          echo "Waiting for services to become healthy..."
+          TIMEOUT=60
+          ELAPSED=0
+          SERVICES=("javaverse-postgres" "javaverse-redis-queue" "javaverse-redis-cache" "javaverse-mailpit")
+
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            ALL_HEALTHY=true
+            for SVC in "${SERVICES[@]}"; do
+              STATUS=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$SVC" 2>/dev/null || echo "not_found")
+              if [ "$STATUS" != "healthy" ]; then
+                ALL_HEALTHY=false
+                break
+              fi
+            done
+            if [ "$ALL_HEALTHY" = true ]; then
+              echo "All services healthy after ${ELAPSED}s"
+              exit 0
+            fi
+            sleep 2
+            ELAPSED=$((ELAPSED + 2))
+          done
+
+          echo "ERROR: Timed out waiting for services to become healthy after ${TIMEOUT}s"
+          docker compose -f infra/docker-compose.yml ps
+          docker compose -f infra/docker-compose.yml logs
+          exit 1
+
+      - name: Apply database migrations
+        run: pnpm --filter @javaverse/db migrate:deploy
+
+      - name: Seed deterministic test limits
+        run: pnpm --filter @javaverse/db seed
+
+      - name: Run unit and integration tests
         run: pnpm test
 
       - name: Build production application
@@ -49,13 +102,18 @@ jobs:
       - name: Run Lighthouse Production Audit
         run: pnpm test:lighthouse
 
-      - name: Run Gitleaks Secret Scanner
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run pinned Gitleaks
+        run: docker run --rm -v ${{ github.workspace }}:/path zricethezav/gitleaks:v8.30.1 detect --source="/path" -v
 
-      - name: Run OSV-Scanner
-        uses: google/osv-scanner-action/osv-scanner-action@v1.9.2
-        with:
-          scan-args: |-
-            --lockfile=pnpm-lock.yaml
+      - name: Run pinned OSV-Scanner under reviewed policy
+        run: docker run --rm -v ${{ github.workspace }}:/src ghcr.io/google/osv-scanner:v2.7.0 --config=/src/osv-scanner.toml /src
+
+      - name: Print infrastructure logs on failure
+        if: failure()
+        run: |
+          docker compose -f infra/docker-compose.yml ps
+          docker compose -f infra/docker-compose.yml logs
+
+      - name: Stop CI infrastructure
+        if: always()
+        run: docker compose -f infra/docker-compose.yml down --remove-orphans
