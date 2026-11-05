@@ -156,3 +156,9 @@ Status: Approved & Implemented
    - Explicitly configured `globalEnv: ["NODE_ENV"]` in `turbo.json` for repository-wide environment context.
    - Forwarded all schema-validated build pipeline environment variables via task-level `tasks.build.env` (including `DATABASE_URL`, `REDIS_*`, `SESSION_SECRET`, `CURSOR_SIGNING_SECRET`, `SANDBOX_SHARED_SECRET`, `ALLOW_LOCAL_SERVICES_IN_PRODUCTION`, `AI_PROVIDER_PRIMARY`, `SANDBOX_PROVIDER`, `SMTP_*`, `APP_URL`, `E2E_FIXTURES_ENABLED`, `STATIC_SCRIPT_HASHES`, etc.).
    - Prevents Turborepo 2.11 environment filtering from stripping job-level CI environment variables during Next.js page prerendering while preserving strict cache hashing, zero secret persistence in repository config, and fail-fast validation when required variables are missing.
+
+8. **Lighthouse CI Container Non-Root Runtime Isolation**:
+   - Pinned Lighthouse CI execution to `patrickhulce/lhci-client:0.15.1@sha256:558210c5e422a7babaaa09c285b7469da3f00fac1a9880c37883c65d666a7fc9`.
+   - Configured non-root runner execution with `--user ${uid}:${gid}` and explicit isolated writable temporary directories: `HOME=/tmp/lhci-home`, `XDG_CONFIG_HOME=/tmp/lhci-home/.config`, `XDG_CACHE_HOME=/tmp/lhci-home/.cache`, and `--shm-size=1g`.
+   - Executed through a safe shell entrypoint that creates and validates writability of `$HOME`, `$XDG_CONFIG_HOME`, and `$XDG_CACHE_HOME` under `/tmp` before execing `lhci`.
+   - Eliminates `//.local` permission denied and crashpad database errors on unmapped runner UIDs (such as GitHub Actions UID 1001) without granting `--privileged` or root permissions.
