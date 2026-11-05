@@ -96,6 +96,42 @@ export default function DashboardSettingsPage() {
           </div>
         </div>
       </section>
+
+      <hr
+        style={{ border: 'none', borderTop: '1px solid var(--border-subtle)', margin: '1rem 0' }}
+      />
+
+      <section
+        aria-labelledby="security-heading"
+        style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}
+      >
+        <h2
+          id="security-heading"
+          style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--text-primary)' }}
+        >
+          Account &amp; Security
+        </h2>
+        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
+          Manage your active login sessions, password, and workspace invitations.
+        </p>
+        <div style={{ marginTop: '0.5rem' }}>
+          <a
+            href="/dashboard/settings/security"
+            style={{
+              display: 'inline-block',
+              padding: '0.5rem 1rem',
+              backgroundColor: 'var(--action-primary-bg)',
+              color: 'var(--action-primary-text)',
+              borderRadius: 'var(--radius-md)',
+              textDecoration: 'none',
+              fontWeight: 500,
+              fontSize: 'var(--text-sm)',
+            }}
+          >
+            Manage Security &amp; Sessions →
+          </a>
+        </div>
+      </section>
     </PreviewShell>
   );
 }

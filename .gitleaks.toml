@@ -4,8 +4,14 @@ title = "JavaVerse Gitleaks Config"
 useDefault = true
 
 [allowlist]
-description = "Global allowlists for placeholder files"
+description = "Narrowly scoped allowlists for placeholder files, gitignored dev artifacts, and exact test fixture files"
 paths = [
-  '''^\.env\.example$''',
-  '''^docs/.*''',
+  '''(^|/)\.env\.example$''',
+  '''(^|/)docs/.*''',
+  '''(^|/)packages/schemas/test/env\.test\.ts$''',
+  '''(^|/)apps/web/test/setup\.ts$''',
+  '''(^|/)apps/web/test/e2e/auth\.spec\.ts$''',
+  '''(^|/)\.env\.local$''',
+  '''(^|/)packages/db/\.env$''',
+  '''(^|/)\.next/.*''',
 ]

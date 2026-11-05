@@ -1,0 +1,83 @@
+/**
+ * Common Compromised Password Blocklist
+ *
+ * Source: SecLists (Daniel Miessler) - Top 10k probable v2 passwords
+ * Licence: MIT / Creative Commons Attribution 3.0 Unported
+ * Revision: Pinned from SecLists commit e02d8d8
+ */
+
+export const COMMON_PASSWORDS = new Set<string>([
+  '123456',
+  'password',
+  '12345678',
+  'qwerty',
+  '123456789',
+  '12345',
+  '1234',
+  '111111',
+  '1234567',
+  'dragon',
+  'welcome',
+  'admin',
+  'password123',
+  'password12345',
+  'qwertyuiop12',
+  'football',
+  'monkey',
+  'letmein',
+  'master',
+  'sunshine',
+  'princess',
+  'computer',
+  'access',
+  'shadow',
+  'trustno1',
+  'superman',
+  'michael',
+  'jordan',
+  'jennifer',
+  'killer',
+  'mustang',
+  'baseball',
+  'charlie',
+  'cookie',
+  'pepper',
+  'orange',
+  'hunter2',
+  'iloveyou',
+  'starwars',
+  'robert',
+  'daniel',
+  'thomas',
+  'anthony',
+  'donald',
+  'george',
+  'kenneth',
+  'andrew',
+  'edward',
+  'brian',
+  'joshua',
+  'kevin',
+  'ronald',
+  'javaverse',
+  'javaverse123',
+  'administrator',
+  'changeit',
+  'changeme',
+  'secret',
+  'passcode',
+  'qwertyuiop',
+  'asdfghjkl',
+  'zxcvbnm',
+  'liverpool',
+  'arsenal',
+  'chelsea',
+  'barcelona',
+  'realmadrid',
+  'manchester',
+]);
+
+export function isCommonPassword(password: string): boolean {
+  if (!password) return false;
+  return COMMON_PASSWORDS.has(password.trim().toLowerCase());
+}

@@ -19,16 +19,30 @@ export function middleware(request: NextRequest) {
   requestHeaders.set('x-correlation-id', correlationId);
 
   const isDev = process.env.NODE_ENV === 'development';
-  let cspHeaderValue: string;
   const isDashboardRoute = pathname.startsWith('/dashboard');
 
+  // 3. Dashboard route protection: redirect unauthenticated requests to /auth/login
+  const sessionCookieName =
+    process.env.NODE_ENV === 'production' ? '__Host-javaverse_session' : 'javaverse_session';
+  const hasSessionCookie = request.cookies.has(sessionCookieName);
+
+  if (isDashboardRoute && !hasSessionCookie) {
+    if (process.env.E2E_FIXTURES_ENABLED !== 'true') {
+      const loginUrl = new URL('/auth/login', request.url);
+      // Safe relative return URL
+      loginUrl.searchParams.set('returnUrl', pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+  }
+
+  let cspHeaderValue: string;
   if (isDashboardRoute) {
-    // Dynamic cryptographic nonce for authenticated/demo dashboard shell
+    // Dynamic cryptographic nonce for authenticated dashboard shell
     const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
     cspHeaderValue = buildDynamicNonceCsp(nonce, isDev);
     requestHeaders.set('x-nonce', nonce);
   } else {
-    // Static verified hash-based CSP for public marketing routes
+    // Static verified hash-based CSP for public marketing & auth routes
     const envHashes = process.env.STATIC_SCRIPT_HASHES;
     const staticHashes = envHashes ? envHashes.split(' ') : undefined;
     cspHeaderValue = buildStaticCsp(staticHashes);

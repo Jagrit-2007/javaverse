@@ -4,17 +4,20 @@ This inventory documents the open-source licences of direct dependencies and bas
 
 ## Direct Runtime Dependencies
 
-| Package          | Version Range | Licence    | Purpose                                 |
-| :--------------- | :------------ | :--------- | :-------------------------------------- |
-| `next`           | `16.4.3`      | MIT        | Web application framework (App Router)  |
-| `react`          | `19.3.1`      | MIT        | UI rendering engine                     |
-| `react-dom`      | `19.3.1`      | MIT        | DOM rendering runtime                   |
-| `@prisma/client` | `^6.4.1`      | Apache-2.0 | PostgreSQL type-safe query client       |
-| `zod`            | `^4.6.7`      | MIT        | Runtime schema & environment validation |
-| `bullmq`         | `^5.41.0`     | MIT        | Distributed job queue management        |
-| `ioredis`        | `^5.6.0`      | MIT        | Redis client for BullMQ and cache       |
-| `pino`           | `^9.6.0`      | MIT        | Fast structured JSON logging            |
-| `lucide-react`   | `1.61.0`      | ISC        | Accessible UI icons                     |
+| Package           | Version Range | Licence    | Purpose                                 |
+| :---------------- | :------------ | :--------- | :-------------------------------------- |
+| `next`            | `16.4.3`      | MIT        | Web application framework (App Router)  |
+| `react`           | `19.3.1`      | MIT        | UI rendering engine                     |
+| `react-dom`       | `19.3.1`      | MIT        | DOM rendering runtime                   |
+| `@prisma/client`  | `^6.4.1`      | Apache-2.0 | PostgreSQL type-safe query client       |
+| `zod`             | `^4.6.7`      | MIT        | Runtime schema & environment validation |
+| `bullmq`          | `^5.41.0`     | MIT        | Distributed job queue management        |
+| `ioredis`         | `^5.6.0`      | MIT        | Redis client for BullMQ and cache       |
+| `pino`            | `^9.6.0`      | MIT        | Fast structured JSON logging            |
+| `lucide-react`    | `1.61.0`      | ISC        | Accessible UI icons                     |
+| `@node-rs/argon2` | `2.2.2`       | MIT        | Argon2id password hashing               |
+| `otpauth`         | `9.5.2`       | MIT        | RFC 6238 TOTP engine                    |
+| `nodemailer`      | `10.3.1`      | MIT-0      | Transactional email delivery            |
 
 ## Direct Development & Test Dependencies
 
@@ -30,7 +33,6 @@ This inventory documents the open-source licences of direct dependencies and bas
 | `pino-pretty`                 | `^13.0.0`     | MIT        | Development log formatting                    |
 | `@playwright/test`            | `1.64.1`      | Apache-2.0 | End-to-end browser automation and test runner |
 | `@axe-core/playwright`        | `4.14.0`      | MPL-2.0    | Automated WCAG 2.2 AA accessibility audit     |
-| `@lhci/cli`                   | `0.15.1`      | Apache-2.0 | Lighthouse CI performance and a11y auditing   |
 | `@testing-library/react`      | `16.3.3`      | MIT        | React UI component testing harness            |
 | `@testing-library/user-event` | `14.6.8`      | MIT        | High-fidelity user interaction simulation     |
 | `jsdom`                       | `30.1.3`      | MIT        | Headless DOM implementation for unit tests    |
@@ -45,3 +47,19 @@ This inventory documents the open-source licences of direct dependencies and bas
 | `elestio/minio`     | `latest` (tagged `minio/minio:latest`) | AGPL-3.0                   | S3-compatible private storage                      |
 | `axllent/mailpit`   | `latest`                               | MIT                        | Development SMTP and testing webmail               |
 | `clamav/clamav`     | `stable`                               | GPL-2.0                    | Malware scanner (under optional profile `uploads`) |
+
+## Pinned External Security & CI Tools
+
+| Tool / Container Image       | Pinned Tag / Digest                                                              | Licence    | Purpose                                               |
+| :--------------------------- | :------------------------------------------------------------------------------- | :--------- | :---------------------------------------------------- |
+| `zricethezav/gitleaks`       | `v8.30.1`                                                                        | MIT        | Pinned secret detection scanner (pre-commit & CI)     |
+| `ghcr.io/google/osv-scanner` | `v2.7.0`                                                                         | Apache-2.0 | Pinned open-source vulnerability scanner              |
+| `patrickhulce/lhci-client`   | `0.15.1@sha256:558210c5e422a7babaaa09c285b7469da3f00fac1a9880c37883c65d666a7fc9` | Apache-2.0 | Containerized Lighthouse CI performance & a11y runner |
+
+## Pinned External Security & CI Tools
+
+| Tool / Container Image           | Pinned Tag / Digest                                                      | Licence    | Purpose                                               |
+| :------------------------------- | :----------------------------------------------------------------------- | :--------- | :---------------------------------------------------- |
+| `zricethezav/gitleaks`           | `v8.30.1`                                                                | MIT        | Pinned secret detection scanner (pre-commit & CI)     |
+| `ghcr.io/google/osv-scanner`     | `v2.7.0`                                                                 | Apache-2.0 | Pinned open-source vulnerability scanner              |
+| `patrickhulce/lhci-client`       | `0.15.1@sha256:558210c5e422a7babaaa09c285b7469da3f00fac1a9880c37883c65d666a7fc9` | Apache-2.0 | Containerized Lighthouse CI performance & a11y runner |

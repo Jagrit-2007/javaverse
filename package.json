@@ -15,7 +15,9 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,js,mjs,json,md,yml,yaml}\"",
     "format": "prettier --write \"**/*.{ts,tsx,js,mjs,json,md,yml,yaml}\"",
     "test:clean-db": "node scripts/verify-clean-db.mjs",
-    "generate-env": "node scripts/generate-env-local.mjs"
+    "test:lighthouse": "node scripts/audit-lighthouse.mjs",
+    "generate-env": "node scripts/generate-env-local.mjs",
+    "bootstrap:owner": "node scripts/bootstrap-owner.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

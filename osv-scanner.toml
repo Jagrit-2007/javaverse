@@ -1,0 +1,20 @@
+# ==============================================================================
+# JavaVerse OSV-Scanner Configuration (Phase 3 Hardened)
+# Documented rationale for devDependencies/transitive dependencies per RSK-05
+# Valid keys per [[IgnoredVulns]]: id (string), ignoreUntil (date), reason (string)
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. GHSA-g3hv-75wg-m249
+# Package: minimatch (v10.2.6)
+# Dependency Path: javaverse (devDependencies) > typescript-eslint@8.72.0 > @typescript-eslint/typescript-estree@8.72.0 > minimatch@10.2.6
+# Severity: Moderate (CVSS 6.9)
+# Reachability: Development linting toolchain only; not bundled into runtime or production artifacts.
+# Owner: Tooling
+# Expiry: 2026-12-31
+# Remediation: Upstream update to typescript-eslint when @typescript-eslint/typescript-estree updates minimatch to >= 11.0.1.
+# ------------------------------------------------------------------------------
+[[IgnoredVulns]]
+id = "GHSA-g3hv-75wg-m249"
+ignoreUntil = 2026-12-31
+reason = "Transitive build-time devDependency in typescript-eslint (minimatch); development linting toolchain only; not bundled or executed in production. Package: minimatch, Severity: Moderate (CVSS 6.9), Reachability: None (lint-time only), Owner: Tooling, Remediation: Upstream update in typescript-eslint to >=11.0.1"

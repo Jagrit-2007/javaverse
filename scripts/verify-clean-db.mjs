@@ -119,6 +119,29 @@ try {
     throw new Error('Invariant violation: Chat slot > 3 was permitted');
   }
 
+  // Verify Phase 3 auth_hardening fields
+  const session = await prisma.session.create({
+    data: {
+      id: 'test-session-digest-clean-db',
+      userId: owner1.id,
+      expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000),
+    },
+  });
+
+  if (!session.publicId || !session.lastSeenAt) {
+    throw new Error('Session publicId or lastSeenAt missing from auth_hardening');
+  }
+  console.log('  Confirmed: Session publicId and lastSeenAt verified');
+
+  const updatedOwner = await prisma.user.update({
+    where: { id: owner1.id },
+    data: { displayName: 'Initial Platform Owner' },
+  });
+  if (updatedOwner.displayName !== 'Initial Platform Owner') {
+    throw new Error('Failed to persist displayName on user');
+  }
+  console.log('  Confirmed: User displayName persistence verified');
+
   await prisma.$disconnect();
 
   // 6. Cleanup test database

@@ -1,15 +1,44 @@
 'use client';
 
-import React from 'react';
-import { Search, Bell } from 'lucide-react';
+import React, { useState } from 'react';
+import { Search, Bell, LogOut } from 'lucide-react';
 import { ThemeSelector } from '../theme/ThemeSelector';
 import styles from './TopBar.module.css';
 
 interface TopBarProps {
   onSearchClick?: () => void;
+  user?: {
+    displayName: string;
+    role: string;
+  };
 }
 
-export function TopBar({ onSearchClick }: TopBarProps) {
+export function TopBar({ onSearchClick, user }: TopBarProps) {
+  const [loggingOut, setLoggingOut] = useState(false);
+  const displayName = user?.displayName || 'Learner';
+  const initial = displayName.charAt(0).toUpperCase();
+
+  const handleLogout = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      const csrfRes = await fetch('/api/v1/auth/csrf');
+      const csrfData = await csrfRes.json();
+      const token = csrfData?.data?.csrfToken;
+
+      await fetch('/api/v1/auth/logout', {
+        method: 'POST',
+        headers: {
+          'x-csrf-token': token || '',
+        },
+      });
+    } catch {
+      // Proceed with redirection even if network fails
+    } finally {
+      window.location.href = '/auth/login';
+    }
+  };
+
   return (
     <header className={styles.topBar} aria-label="Dashboard Header">
       <div className={styles.searchWrapper}>
@@ -38,12 +67,23 @@ export function TopBar({ onSearchClick }: TopBarProps) {
 
         <button
           type="button"
-          className={styles.avatarButton}
-          aria-label="Learner Profile Menu"
-          title="Learner profile"
+          onClick={handleLogout}
+          className={styles.iconButton}
+          aria-label="Sign out of JavaVerse"
+          title="Sign out"
+          disabled={loggingOut}
         >
-          <span aria-hidden="true">L</span>
+          <LogOut size={18} aria-hidden="true" />
         </button>
+
+        <div
+          className={styles.avatarButton}
+          role="img"
+          aria-label={`${displayName} profile (${user?.role || 'Member'})`}
+          title={`${displayName} (${user?.role || 'Member'})`}
+        >
+          <span aria-hidden="true">{initial}</span>
+        </div>
       </div>
     </header>
   );
