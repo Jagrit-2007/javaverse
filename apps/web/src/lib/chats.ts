@@ -7,7 +7,7 @@ import {
   type Prisma,
 } from '@javaverse/db';
 import { getRedisCacheClient } from './redis';
-import { enqueueAnalysisJob } from './queue';
+import { enqueueAnalysisJob, getAnalysisQueue } from './queue';
 
 export class ChatLimitReachedError extends Error {
   code = 'CHAT_LIMIT_REACHED';
@@ -490,28 +490,183 @@ export async function cancelChatJob(chatId: string, userId: string): Promise<voi
 }
 
 /**
- * Retries a failed or stalled job for a chat.
+ * Retries a failed or stalled assistant job for a chat without duplicating the user message.
  */
 export async function retryChatJob(
   chatId: string,
   userId: string,
   correlationId: string,
 ): Promise<DurableJob> {
-  const latestMessage = await prisma.message.findFirst({
-    where: { chatId, role: 'USER' },
-    orderBy: { createdAt: 'desc' },
+  const chat = await prisma.chat.findFirst({
+    where: { id: chatId, userId },
   });
 
-  if (!latestMessage) {
-    throw new Error('No user message to retry.');
+  if (!chat) {
+    throw new ChatNotFoundError();
   }
 
-  const result = await postUserMessage({
+  // Transactionally lock and retry the existing failed assistant job
+  const retryResult = await prisma.$transaction(async (tx) => {
+    // Find the latest assistant message and its parent user message
+    const latestAssistantMsg = await tx.message.findFirst({
+      where: { chatId, role: 'ASSISTANT' },
+      orderBy: { createdAt: 'desc' },
+      include: { parent: true },
+    });
+
+    if (!latestAssistantMsg || !latestAssistantMsg.parent) {
+      throw new Error('No assistant message available to retry.');
+    }
+
+    // Row-lock the latest durable job for this chat to serialize concurrent retries
+    const lockedJobs = await tx.$queryRaw<
+      Array<{
+        id: string;
+        status: string;
+        stage: string | null;
+        user_id: string | null;
+        chat_id: string | null;
+        correlation_id: string;
+      }>
+    >`
+      SELECT id, status, stage, user_id, chat_id, correlation_id
+      FROM durable_jobs
+      WHERE chat_id = ${chatId}::uuid AND user_id = ${userId}::uuid
+      ORDER BY started_at DESC
+      LIMIT 1
+      FOR UPDATE
+    `;
+
+    const latestJob = lockedJobs[0];
+    if (!latestJob) {
+      throw new Error('No durable job found for this chat.');
+    }
+
+    // Prevent retrying completed jobs
+    if (latestJob.status === 'COMPLETED') {
+      throw new Error('Cannot retry a completed job.');
+    }
+
+    // Prevent retrying actively running jobs
+    if (latestJob.status === 'RUNNING') {
+      throw new Error('Cannot retry an actively running job.');
+    }
+
+    // If job is PENDING and never failed (initial post still pending), reject
+    if (latestJob.status === 'PENDING' && latestAssistantMsg.status !== 'FAILED') {
+      // If already pending retry from a concurrent request, return existing job (idempotent)
+      const existingDbJob = await tx.durableJob.findUnique({
+        where: { id: latestJob.id },
+      });
+      if (existingDbJob) {
+        return { job: existingDbJob, shouldEnqueue: false, assistantMsg: latestAssistantMsg };
+      }
+    }
+
+    // Ensure the job or assistant message is in a failed state
+    if (latestJob.status !== 'FAILED' && latestAssistantMsg.status !== 'FAILED') {
+      throw new Error('Cannot retry a job that has not failed.');
+    }
+
+    // Reset the failed assistant message to STREAMING
+    await tx.message.update({
+      where: { id: latestAssistantMsg.id },
+      data: {
+        status: 'STREAMING',
+        content: '',
+      },
+    });
+
+    // Reset the durable job to PENDING
+    const updatedJob = await tx.durableJob.update({
+      where: { id: latestJob.id },
+      data: {
+        status: 'PENDING',
+        stage: 'reading',
+        progress: 5,
+        attempts: 0,
+        leaseOwner: null,
+        leaseExpiresAt: null,
+        finishedAt: null,
+        correlationId,
+        startedAt: new Date(),
+      },
+    });
+
+    // Delete any prior analysis record associated with this message
+    await tx.analysis.deleteMany({
+      where: { messageId: latestAssistantMsg.id },
+    });
+
+    // Find latest event sequence for this job to preserve unique constraint
+    const maxSeq = await tx.userStreamEvent.aggregate({
+      where: { jobId: updatedJob.id },
+      _max: { jobEventSeq: true },
+    });
+    const nextSeq = (maxSeq._max.jobEventSeq || 0) + 1;
+
+    // Create fresh stream event for the retry
+    const streamEvent = await tx.userStreamEvent.create({
+      data: {
+        jobEventSeq: nextSeq,
+        userId,
+        chatId,
+        jobId: updatedJob.id,
+        eventType: 'stage_changed',
+        payload: {
+          jobId: updatedJob.id,
+          stage: 'reading',
+          progress: 5,
+          messageId: latestAssistantMsg.id,
+        },
+      },
+    });
+
+    return {
+      job: updatedJob,
+      shouldEnqueue: true,
+      assistantMsg: latestAssistantMsg,
+      streamEvent,
+    };
+  });
+
+  if (!retryResult.shouldEnqueue) {
+    return retryResult.job;
+  }
+
+  // Publish event to Redis Pub/Sub for active SSE clients
+  try {
+    const redis = getRedisCacheClient();
+    if (retryResult.streamEvent) {
+      await redis.publish(
+        `events:user:${userId}`,
+        JSON.stringify({
+          streamSeq: retryResult.streamEvent.streamSeq.toString(),
+          eventType: retryResult.streamEvent.eventType,
+          payload: retryResult.streamEvent.payload,
+          createdAt: retryResult.streamEvent.createdAt.toISOString(),
+        }),
+      );
+    }
+  } catch {}
+
+  // Remove previous BullMQ job instance if present, then re-enqueue
+  const queue = getAnalysisQueue();
+  try {
+    const existingBullJob = await queue.getJob(retryResult.job.id);
+    if (existingBullJob) {
+      await existingBullJob.remove();
+    }
+  } catch {}
+
+  await enqueueAnalysisJob({
+    jobId: retryResult.job.id,
     chatId,
     userId,
-    content: latestMessage.content,
+    messageId: retryResult.assistantMsg.id,
+    userPrompt: retryResult.assistantMsg.parent!.content,
     correlationId,
   });
 
-  return result.job;
+  return retryResult.job;
 }

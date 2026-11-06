@@ -133,14 +133,92 @@ export function JvmMemoryScene3D({ currentStepData, onFallback }: JvmMemoryScene
     metaMesh.position.set(-1, 0, -2.5);
     rootGroup.add(metaMesh);
 
-    // 4. Animation Loop
-    let animId: number;
-    const animate = () => {
-      animId = requestAnimationFrame(animate);
-      rootGroup.rotation.y += 0.005;
+    // 4. Motion Preference & Animation Loop
+    const mediaQuery =
+      typeof window !== 'undefined' && window.matchMedia
+        ? window.matchMedia('(prefers-reduced-motion: reduce)')
+        : null;
+
+    let isReducedMotion = mediaQuery ? mediaQuery.matches : false;
+    let animId: number | null = null;
+
+    const renderScene = () => {
       renderer.render(scene, camera);
     };
-    animate();
+
+    const animate = () => {
+      if (!isReducedMotion) {
+        rootGroup.rotation.y += 0.005;
+        renderScene();
+        animId = requestAnimationFrame(animate);
+      }
+    };
+
+    if (isReducedMotion) {
+      renderScene();
+    } else {
+      animId = requestAnimationFrame(animate);
+    }
+
+    const handleMotionChange = (e: MediaQueryListEvent | MediaQueryList) => {
+      isReducedMotion = e.matches;
+      if (isReducedMotion) {
+        if (animId !== null) {
+          cancelAnimationFrame(animId);
+          animId = null;
+        }
+        renderScene();
+      } else {
+        if (animId === null) {
+          animId = requestAnimationFrame(animate);
+        }
+      }
+    };
+
+    interface LegacyMediaQueryList {
+      addListener: (listener: (e: MediaQueryListEvent) => void) => void;
+      removeListener: (listener: (e: MediaQueryListEvent) => void) => void;
+    }
+
+    if (mediaQuery) {
+      if (typeof mediaQuery.addEventListener === 'function') {
+        mediaQuery.addEventListener('change', handleMotionChange);
+      } else if (
+        'addListener' in mediaQuery &&
+        typeof (mediaQuery as unknown as LegacyMediaQueryList).addListener === 'function'
+      ) {
+        (mediaQuery as unknown as LegacyMediaQueryList).addListener(
+          handleMotionChange as (e: MediaQueryListEvent) => void,
+        );
+      }
+    }
+
+    // Manual Interaction (Pointer Drag) - Preserved regardless of motion preference
+    let isDragging = false;
+    let previousPointerX = 0;
+
+    const handlePointerDown = (e: PointerEvent) => {
+      isDragging = true;
+      previousPointerX = e.clientX;
+    };
+
+    const handlePointerMove = (e: PointerEvent) => {
+      if (!isDragging) return;
+      const deltaX = e.clientX - previousPointerX;
+      previousPointerX = e.clientX;
+      rootGroup.rotation.y += deltaX * 0.01;
+      renderScene();
+    };
+
+    const handlePointerUp = () => {
+      isDragging = false;
+    };
+
+    const domElement = renderer.domElement;
+    domElement.style.touchAction = 'none';
+    domElement.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
 
     // 5. Resize Handler
     const handleResize = () => {
@@ -150,13 +228,33 @@ export function JvmMemoryScene3D({ currentStepData, onFallback }: JvmMemoryScene
       camera.aspect = newWidth / newHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(newWidth, newHeight);
+      renderScene();
     };
     window.addEventListener('resize', handleResize);
 
     // 6. Cleanup on unmount
     return () => {
       window.removeEventListener('resize', handleResize);
-      cancelAnimationFrame(animId);
+      if (animId !== null) {
+        cancelAnimationFrame(animId);
+        animId = null;
+      }
+      if (mediaQuery) {
+        if (typeof mediaQuery.removeEventListener === 'function') {
+          mediaQuery.removeEventListener('change', handleMotionChange);
+        } else if (
+          'removeListener' in mediaQuery &&
+          typeof (mediaQuery as unknown as LegacyMediaQueryList).removeListener === 'function'
+        ) {
+          (mediaQuery as unknown as LegacyMediaQueryList).removeListener(
+            handleMotionChange as (e: MediaQueryListEvent) => void,
+          );
+        }
+      }
+      domElement.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+
       stackGeo.dispose();
       stackMat.dispose();
       edenGeo.dispose();

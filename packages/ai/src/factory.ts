@@ -4,10 +4,11 @@ import { AnthropicProvider } from './providers/anthropic';
 import { GeminiProvider } from './providers/gemini';
 
 export interface ProviderFactoryOptions {
-  primary?: 'mock' | 'anthropic' | 'gemini' | string;
-  fallback?: 'mock' | 'anthropic' | 'gemini' | string;
-  anthropicApiKey?: string;
-  geminiApiKey?: string;
+  primary?: 'mock' | 'anthropic' | 'gemini' | string | undefined;
+  fallback?: 'mock' | 'anthropic' | 'gemini' | string | undefined;
+  anthropicApiKey?: string | undefined;
+  geminiApiKey?: string | undefined;
+  timeoutMs?: number | undefined;
 }
 
 export class FallbackProviderWrapper implements AIProvider {
@@ -37,11 +38,15 @@ export function getAIProvider(options?: ProviderFactoryOptions): AIProvider {
   const createProviderInstance = (type: string): AIProvider => {
     switch (type) {
       case 'anthropic':
-        return new AnthropicProvider(
-          options?.anthropicApiKey ? { apiKey: options.anthropicApiKey } : {},
-        );
+        return new AnthropicProvider({
+          apiKey: options?.anthropicApiKey,
+          timeoutMs: options?.timeoutMs,
+        });
       case 'gemini':
-        return new GeminiProvider(options?.geminiApiKey ? { apiKey: options.geminiApiKey } : {});
+        return new GeminiProvider({
+          apiKey: options?.geminiApiKey,
+          timeoutMs: options?.timeoutMs,
+        });
       case 'mock':
       default:
         return new MockProvider();

@@ -72,8 +72,55 @@ export async function handleUserEventStream(
   let isClosed = false;
   let heartbeatInterval: NodeJS.Timeout | null = null;
 
+  function cleanup() {
+    if (isClosed) return;
+    isClosed = true;
+
+    try {
+      request.signal.removeEventListener('abort', onAbort);
+    } catch {
+      // Ignored
+    }
+
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
+    }
+
+    try {
+      subRedis.removeAllListeners();
+      subRedis.disconnect();
+    } catch {
+      // Ignored
+    }
+
+    // Decrement connection count exactly once
+    cacheRedis.decr(connKey).catch(() => {});
+  }
+
+  const onAbort = () => {
+    cleanup();
+  };
+
+  if (request.signal.aborted) {
+    cleanup();
+  } else {
+    try {
+      request.signal.addEventListener('abort', onAbort, { once: true });
+    } catch {
+      // Ignored
+    }
+  }
+
   const stream = new ReadableStream({
     async start(controller) {
+      if (isClosed) {
+        try {
+          controller.close();
+        } catch {}
+        return;
+      }
+
       const encoder = new TextEncoder();
 
       const send = (data: string) => {
@@ -151,25 +198,6 @@ export async function handleUserEventStream(
       cleanup();
     },
   });
-
-  function cleanup() {
-    if (isClosed) return;
-    isClosed = true;
-
-    if (heartbeatInterval) {
-      clearInterval(heartbeatInterval);
-      heartbeatInterval = null;
-    }
-
-    try {
-      subRedis.disconnect();
-    } catch {
-      // Ignored
-    }
-
-    // Decrement connection count
-    cacheRedis.decr(connKey).catch(() => {});
-  }
 
   return new Response(stream, {
     headers: {

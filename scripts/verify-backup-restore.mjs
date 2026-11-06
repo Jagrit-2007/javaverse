@@ -76,7 +76,58 @@ try {
     throw new Error('Backup failed: No .sql.gz archive found in output directory.');
   }
   const backupPath = path.join(BACKUP_TMP_DIR, backupGz);
+  const checksumPath = `${backupPath}.sha256`;
   console.log(`Found backup archive: ${backupPath}`);
+
+  // 2.1 Verify restrictive permissions (LOW 3: Backup files must NOT be world-readable)
+  console.log('2.1 Verifying restrictive file permissions on backup and checksum...');
+  const backupStat = fs.statSync(backupPath);
+  const backupMode = backupStat.mode & 0o777;
+  if ((backupStat.mode & 0o077) !== 0) {
+    throw new Error(
+      `Insecure permissions on backup archive: 0${backupMode.toString(8)}. Must not be group or world readable.`,
+    );
+  }
+
+  const checksumStat = fs.statSync(checksumPath);
+  const checksumMode = checksumStat.mode & 0o777;
+  if ((checksumStat.mode & 0o077) !== 0) {
+    throw new Error(
+      `Insecure permissions on checksum file: 0${checksumMode.toString(8)}. Must not be group or world readable.`,
+    );
+  }
+  console.log(
+    `  Confirmed: Restrictive permissions verified (backup: 0${backupMode.toString(8)}, checksum: 0${checksumMode.toString(8)})`,
+  );
+
+  // 2.2 Test permission enforcement independent of operator's shell umask (using permissive umask 000)
+  console.log(
+    '2.2 Testing permission enforcement independent of operator umask (simulating umask 000)...',
+  );
+  const umaskTestDir = path.join(rootDir, 'backups', 'verify_umask_tmp');
+  if (fs.existsSync(umaskTestDir)) {
+    fs.rmSync(umaskTestDir, { recursive: true, force: true });
+  }
+  fs.mkdirSync(umaskTestDir, { recursive: true });
+
+  execSync(`(umask 000 && bash scripts/backup-db.sh "${umaskTestDir}")`, {
+    cwd: rootDir,
+    stdio: 'inherit',
+  });
+
+  const umaskFiles = fs.readdirSync(umaskTestDir);
+  const umaskBackupGz = umaskFiles.find((f) => f.endsWith('.sql.gz'));
+  if (!umaskBackupGz) {
+    throw new Error('Umask test backup failed.');
+  }
+  const umaskBackupStat = fs.statSync(path.join(umaskTestDir, umaskBackupGz));
+  if ((umaskBackupStat.mode & 0o077) !== 0) {
+    throw new Error(
+      `Umask test failed: Backup file created with open permissions: 0${(umaskBackupStat.mode & 0o777).toString(8)}`,
+    );
+  }
+  fs.rmSync(umaskTestDir, { recursive: true, force: true });
+  console.log('  Confirmed: Backup permissions enforced strictly despite operator umask 000');
 
   // 3. Prepare clean destination database
   console.log(`3. Recreating isolated test database '${TEST_RESTORE_DB}'...`);

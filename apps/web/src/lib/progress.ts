@@ -140,19 +140,17 @@ export async function awardPracticeProgressRewards(
 
   // Idempotent XP: only award if not already completed!
   const xpToAdd = isNewCompletion ? 100 : 0;
-  let updatedXp = rewards.xp;
 
-  if (isNewCompletion) {
-    const updated = await prisma.userReward.update({
-      where: { userId },
-      data: {
-        xp: { increment: 100 },
-        streakDays: nextStreak,
-        lastActivityDate: todayUtc,
-      },
-    });
-    updatedXp = updated.xp;
-  }
+  // Always update daily activity and streak on successful completion, but only increment XP once
+  const updated = await prisma.userReward.update({
+    where: { userId },
+    data: {
+      ...(isNewCompletion ? { xp: { increment: 100 } } : {}),
+      streakDays: nextStreak,
+      lastActivityDate: todayUtc,
+    },
+  });
+  const updatedXp = updated.xp;
 
   // Evaluate badge awards
   const newlyAwardedBadges: string[] = [];

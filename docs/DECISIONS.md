@@ -295,3 +295,43 @@ Status: Approved & Implemented
 3. **Concurrency Safety & High-Volume Idempotency**:
    - Refactored reward calculation in `progress.ts` to use atomic database operations, ensuring zero duplicate XP awards under simultaneous burst traffic.
    - Validated session revocation under concurrency: deleting sessions by `userId` revokes 20 concurrent sessions immediately without affecting other active users.
+
+---
+
+## Phases 4–11 Owner-Audit Remediation Decisions
+
+1. **AI Provider Gateway & Worker Normalization (MEDIUM 1 & MEDIUM 4)**:
+   - Wired the worker's analysis processor (`analysisProcessor.ts`) to `@javaverse/ai`'s `getAIProvider` factory instead of hardcoded mock functions, preserving `mock` as default.
+   - External providers (Anthropic, Gemini) are chosen strictly through validated server environment configuration, never client parameters.
+   - Removed Gemini API keys from URLs, standardizing on the `x-goog-api-key` header with automated key sanitization in error messages.
+   - Standardized timeout handling and normalized error responses for schema/JSON validation failures.
+
+2. **3D Visualization Reduced-Motion Adherence (MEDIUM 2)**:
+   - Embedded `prefers-reduced-motion: reduce` detection in `JvmMemoryScene3D.tsx`.
+   - Automatic rotation loop is disabled when reduced-motion is preferred, rendering the 3D scene statically.
+   - Manual pointer-drag interaction is preserved to permit accessible user exploration without forced motion.
+   - Added live media query change listeners that start/stop animation on preference toggle, with cleanup on unmount.
+
+3. **SSE Connection Teardown & Limit Restitution (MEDIUM 3)**:
+   - Bound HTTP `request.signal` abort directly to stream cleanup in `handleUserEventStream`.
+   - Guaranteed single-execution decrement of per-user active SSE counter in Redis under any race condition between client abort, stream cancel, and heartbeat failure.
+
+4. **Owner Evals Provider Factory Resolution (MEDIUM 5)**:
+   - Resolved AI provider via `getAIProvider` in `/api/v1/admin/evals`, maintaining `mock` as default.
+   - Ignored client-supplied provider/key parameters in request payloads to prevent credential overrides or internal configuration leakage.
+
+5. **Idempotent Chat Retry Without Message Duplication (MEDIUM 6)**:
+   - Updated `retryChatJob` in `chats.ts` to retry existing failed assistant jobs without inserting duplicate user messages.
+   - Blocked retry attempts on actively running or completed jobs.
+   - Serialized concurrent retries via row-level locking (`FOR UPDATE`) to ensure idempotency and prevent duplicate BullMQ jobs or messages.
+
+6. **Raw Expression GIN Index Documentation & Schema-Drift Defense (LOW 1)**:
+   - Confirmed Prisma schema DSL limitations regarding expression-based functional indexes (`to_tsvector` with concatenation).
+   - Documented intentional raw SQL index `kb_items_search_idx` in `schema.prisma`.
+   - Added automated drift verification to `scripts/verify-clean-db.mjs`.
+
+7. **Daily Practice Streak Advance on Next Day (LOW 2)**:
+   - Ensured repeat practice completions update daily activity and advance streaks on subsequent eligible calendar days while preserving single-award XP rules.
+
+8. **Hardened Backup File Permissions (LOW 3)**:
+   - Enforced `umask 077` and `chmod 600` on database backups and checksums in `scripts/backup-db.sh`, verifying permissions independently of operator shell configuration.

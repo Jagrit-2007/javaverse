@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { prisma } from '@javaverse/db';
-import { createChatInFirstFreeSlot, postUserMessage, cancelChatJob } from '@/lib/chats';
+import {
+  createChatInFirstFreeSlot,
+  postUserMessage,
+  cancelChatJob,
+  retryChatJob,
+} from '@/lib/chats';
 import { handleUserEventStream } from '@/lib/events';
 import { NextRequest } from 'next/server';
 import { processAnalysisJob } from '../../../../apps/worker/src/processors/analysisProcessor';
@@ -343,6 +348,119 @@ describe('Phase 4: Durable Jobs, Mock Worker & SSE Streaming', () => {
         where: { jobId: submission.job.id, eventType: 'job_failed' },
       });
       expect(failureEvent).toBeDefined();
+    });
+  });
+
+  describe('Chat Retry Remediation (MEDIUM 6)', () => {
+    it('retries existing failed assistant job without inserting another user message and preserves correlation chain', async () => {
+      const submission = await postUserMessage({
+        chatId,
+        userId,
+        content: 'Original user question to be retried',
+        correlationId: 'corr-retry-initial',
+      });
+
+      const initialCount = await prisma.message.count({ where: { chatId } });
+      expect(initialCount).toBe(2); // 1 USER, 1 ASSISTANT
+
+      // Simulate failure
+      await prisma.durableJob.update({
+        where: { id: submission.job.id },
+        data: { status: 'FAILED', finishedAt: new Date() },
+      });
+      await prisma.message.update({
+        where: { id: submission.assistantMessage.id },
+        data: { status: 'FAILED' },
+      });
+
+      // Execute retry
+      const retriedJob = await retryChatJob(chatId, userId, 'corr-retry-turn-2');
+      expect(retriedJob.id).toBe(submission.job.id);
+      expect(retriedJob.status).toBe('PENDING');
+
+      // Crucial: Message count MUST NOT increase (no duplicate USER message)
+      const messageCountAfterRetry = await prisma.message.count({ where: { chatId } });
+      expect(messageCountAfterRetry).toBe(2);
+
+      // Verify messages: original user message and assistant message preserved
+      const userMessages = await prisma.message.findMany({
+        where: { chatId, role: 'USER' },
+      });
+      expect(userMessages.length).toBe(1);
+      expect(userMessages[0]?.content).toBe('Original user question to be retried');
+
+      const assistantMessages = await prisma.message.findMany({
+        where: { chatId, role: 'ASSISTANT' },
+      });
+      expect(assistantMessages.length).toBe(1);
+      expect(assistantMessages[0]?.status).toBe('STREAMING');
+      expect(assistantMessages[0]?.parentId).toBe(userMessages[0]?.id);
+    });
+
+    it('prevents retrying completed or actively running jobs', async () => {
+      const submission = await postUserMessage({
+        chatId,
+        userId,
+        content: 'Question testing guardrails',
+        correlationId: 'corr-guardrails',
+      });
+
+      // While RUNNING -> reject
+      await prisma.durableJob.update({
+        where: { id: submission.job.id },
+        data: { status: 'RUNNING' },
+      });
+      await expect(retryChatJob(chatId, userId, 'corr-fail-running')).rejects.toThrow(
+        /Cannot retry an actively running job/,
+      );
+
+      // When COMPLETED -> reject
+      await prisma.durableJob.update({
+        where: { id: submission.job.id },
+        data: { status: 'COMPLETED', finishedAt: new Date() },
+      });
+      await expect(retryChatJob(chatId, userId, 'corr-fail-completed')).rejects.toThrow(
+        /Cannot retry a completed job/,
+      );
+    });
+
+    it('concurrent retries do not create duplicate jobs and are idempotent', async () => {
+      const submission = await postUserMessage({
+        chatId,
+        userId,
+        content: 'Question for concurrent retry test',
+        correlationId: 'corr-concurrent-test',
+      });
+
+      // Terminally fail the job
+      await prisma.durableJob.update({
+        where: { id: submission.job.id },
+        data: { status: 'FAILED', finishedAt: new Date() },
+      });
+      await prisma.message.update({
+        where: { id: submission.assistantMessage.id },
+        data: { status: 'FAILED' },
+      });
+
+      // Fire 3 simultaneous retry calls
+      const [r1, r2, r3] = await Promise.all([
+        retryChatJob(chatId, userId, 'retry-call-1'),
+        retryChatJob(chatId, userId, 'retry-call-2'),
+        retryChatJob(chatId, userId, 'retry-call-3'),
+      ]);
+
+      // All calls resolve to the SAME job
+      expect(r1.id).toBe(submission.job.id);
+      expect(r2.id).toBe(submission.job.id);
+      expect(r3.id).toBe(submission.job.id);
+
+      // Verify no duplicate jobs created in DB
+      const jobCount = await prisma.durableJob.count({ where: { chatId } });
+      expect(jobCount).toBe(1);
+
+      // Verify no duplicate messages created in DB
+      const msgCount = await prisma.message.count({ where: { chatId } });
+      expect(msgCount).toBe(2);
     });
   });
 });

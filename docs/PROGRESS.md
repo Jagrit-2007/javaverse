@@ -461,10 +461,67 @@ PASS — all criteria verified and passing
    - Lighthouse CI audit: Mobile performance 0.99-1.0, accessibility 0.96-1.0, best practices 1.0, SEO 1.0.
    - Security scanning: Zero leaks on Gitleaks v8.30.1; zero vulnerabilities on OSV-Scanner v2.7.0.
 
+## Phases 4–11 Owner-Audit Remediation Status
+
+PASS — all Medium and Low audit findings verified, remediated, and passing regression suites.
+
+### Verification Summary
+
+1. **MEDIUM 1 & MEDIUM 4: AI Providers & Worker Integration**:
+   - Replaced direct `generateMockAnalysis` dependency in `analysisProcessor.ts` with the validated `getAIProvider` factory.
+   - Preserved `mock` as default provider for local development and tests; Anthropic and Gemini selected only via validated server-side environment variables.
+   - Gemini API key removed completely from URL query string; transmitted securely via `x-goog-api-key` header with API key redaction in error messages.
+   - Normalized timeouts (`AbortSignal.timeout`) and malformed provider responses across providers.
+   - 26/26 tests passing in `@javaverse/ai` with unit tests inspecting outbound URLs and headers without calling external APIs.
+
+2. **MEDIUM 2: 3D JVM Reduced-Motion & Accessibility**:
+   - `JvmMemoryScene3D.tsx` respects `prefers-reduced-motion: reduce`.
+   - Halts automatic rotation loop when reduced motion is preferred while rendering static initial state.
+   - Preserves manual pointer drag interaction for full learner exploration.
+   - Dynamically adapts to preference toggling while open and cleans up media-query and animation-frame listeners on unmount.
+   - 6/6 tests passing in `JvmMemoryScene3D.test.tsx`.
+
+3. **MEDIUM 3: SSE Disconnect & Capacity Cleanup**:
+   - `handleUserEventStream` binds `request.signal` abort handling directly to idempotent `cleanup()`.
+   - Removes abort listeners and Redis event handlers during teardown.
+   - Decrements active connection count exactly once across abort, cancellation, and heartbeat timeout races, restoring capacity.
+   - 3/3 tests passing in `sse-cleanup.test.ts`.
+
+4. **MEDIUM 5: Admin Evaluation Route Provider Resolution**:
+   - `/api/v1/admin/evals` resolves provider through `getAIProvider`, preserving `mock` as default.
+   - Rejects arbitrary client-controlled provider injection and ensures zero internal credential leakage in responses.
+   - 10/10 tests passing in `admin-auth.test.ts`.
+
+5. **MEDIUM 6: Chat Retry Without Message Duplication**:
+   - `retryChatJob` transactionally retries existing failed assistant jobs without inserting duplicate user messages.
+   - Preserves original user prompt and correlation chain.
+   - Blocks retrying completed or actively running jobs.
+   - Idempotent: concurrent and repeated retry requests return the active job without duplicate jobs or messages.
+   - 12/12 tests passing in `chat-jobs-sse.test.ts`.
+
+6. **LOW 1: Raw Expression GIN Index Documentation & Drift Check**:
+   - Confirmed Prisma schema DSL cannot represent functional expression GIN index `USING gin(to_tsvector('english', "title" || ' ' || "content"))`.
+   - Documented intentional raw SQL index exception on `KbItem` in `schema.prisma`.
+   - Added schema-drift verification asserting index existence in `scripts/verify-clean-db.mjs`.
+
+7. **LOW 2: Repeat Successful Practice Advances Streak**:
+   - `awardPracticeProgressRewards` updates daily activity and streak on every successful completion.
+   - One-time XP awarded only on first completion; streak does not increment repeatedly on the same day.
+   - Advances streak on the next eligible calendar day.
+   - 15/15 tests passing in `practice.test.ts`.
+
+8. **LOW 3: Backup Permissions Hardening**:
+   - Enforced `umask 077` and `chmod 600` in `scripts/backup-db.sh`.
+   - Verified backup and checksum files are strictly owner-only (0600) independent of operator umask (verified under simulated `umask 000`).
+   - Automated verification in `test:backup-restore`.
+
+9. **INFORMATIONAL: Phase 2 Screenshot Restoration**:
+   - Restored exact seven Phase 2 screenshots from `main` (`dashboard-empty-state.png`, `dashboard-error-state.png`, `dashboard-keyboard-focus.png`, `dashboard-loading-skeleton.png`, `dashboard-reduced-motion.png`, `desktop-dark-dashboard.png`, `desktop-light-dashboard.png`). Zero diff with `main`.
+
 ## Current Objective
 
-Continuous Implementation Cycle Complete: Phases 4 through 11 fully implemented, locally tested, hardened, and verified. Awaiting repository owner review.
+Owner-audit remediation complete for all Medium and Low findings on branch `fix/phases-4-11-owner-audit`. Ready for repository owner review.
 
 ## Blockers
 
-None. All 11 phases passed. All changes remain uncommitted on branch `phase/04-chat-jobs-sse`.
+None. All criteria passing. All changes left uncommitted for owner review.

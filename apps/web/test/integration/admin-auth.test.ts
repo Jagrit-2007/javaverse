@@ -266,5 +266,53 @@ describe('Admin Authorization, Owner Gating, and CSRF Bypass Remediation', () =>
       const ownerJson = await ownerRes.json();
       expect(ownerJson.data).toBeDefined();
     });
+
+    it('MEDIUM 5: enforces OWNER authorization and resolves provider safely without leaking credentials', async () => {
+      // Non-owner (MEMBER) rejection
+      const memberReq = new NextRequest('http://localhost:3000/api/v1/admin/evals', {
+        method: 'POST',
+        headers: {
+          cookie: `${SESSION_COOKIE_NAME}=${memberTokens.rawToken}`,
+          'x-csrf-token': memberCsrfToken,
+          'content-type': 'application/json',
+          origin: 'http://localhost:3000',
+        },
+        body: JSON.stringify({ maxCases: 1 }),
+      });
+      const memberRes = await handleAdminEvalsPost(memberReq);
+      expect(memberRes.status).toBe(403);
+      const memberJson = await memberRes.json();
+      expect(memberJson.error.code).toBe('FORBIDDEN');
+
+      // Valid OWNER execution: does not accept arbitrary client provider and never leaks internal credentials
+      const ownerReq = new NextRequest('http://localhost:3000/api/v1/admin/evals', {
+        method: 'POST',
+        headers: {
+          cookie: `${SESSION_COOKIE_NAME}=${ownerTokens.rawToken}`,
+          'x-csrf-token': ownerCsrfToken,
+          'content-type': 'application/json',
+          origin: 'http://localhost:3000',
+        },
+        body: JSON.stringify({
+          maxCases: 1,
+          provider: 'arbitrary-client-provider-attempt',
+          apiKey: 'client-key-attempt',
+        }),
+      });
+      const ownerRes = await handleAdminEvalsPost(ownerReq);
+      expect(ownerRes.status).toBe(201);
+      const ownerJson = await ownerRes.json();
+      const evalRun = ownerJson.data.evalRun;
+
+      expect(evalRun).toBeDefined();
+      expect(evalRun.model).toBe('mock'); // Uses validated mock provider by default
+      expect(evalRun.suiteName).toBe('javaverse-golden-v1');
+      // Verify no credential fields or arbitrary client provider are leaked
+      expect(JSON.stringify(ownerJson)).not.toContain('arbitrary-client-provider-attempt');
+      expect(JSON.stringify(ownerJson)).not.toContain('client-key-attempt');
+      expect(ownerJson.data.evalRun.apiKey).toBeUndefined();
+      expect(ownerJson.data.evalRun.anthropicApiKey).toBeUndefined();
+      expect(ownerJson.data.evalRun.geminiApiKey).toBeUndefined();
+    });
   });
 });

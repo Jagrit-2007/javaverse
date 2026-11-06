@@ -4,9 +4,9 @@ import { requireOwnerAuth } from '@/lib/adminAuth';
 import { validateCsrf } from '@/lib/csrf';
 import { jsonOk, jsonError } from '@/lib/apiResponse';
 import { recordAuditEvent } from '@/lib/audit';
-import { runGoldenEvaluation } from '@javaverse/ai';
-import { MockProvider } from '@javaverse/ai';
+import { runGoldenEvaluation, getAIProvider } from '@javaverse/ai';
 import { getSandboxClient } from '@javaverse/sandbox';
+import { env } from '@/env';
 
 export async function GET(request: NextRequest) {
   const auth = await requireOwnerAuth(request);
@@ -46,7 +46,12 @@ export async function POST(request: NextRequest) {
   const maxCases = typeof body?.maxCases === 'number' ? body.maxCases : 5;
 
   try {
-    const provider = new MockProvider();
+    const provider = getAIProvider({
+      primary: env.AI_PROVIDER_PRIMARY,
+      fallback: 'mock',
+      anthropicApiKey: env.ANTHROPIC_API_KEY,
+      geminiApiKey: env.GEMINI_API_KEY,
+    });
     const sandboxClient = getSandboxClient();
 
     const evalResult = await runGoldenEvaluation({

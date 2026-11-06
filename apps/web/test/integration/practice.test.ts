@@ -8,6 +8,7 @@ import {
 } from '@/lib/practice';
 import {
   calculateStreak,
+  awardPracticeProgressRewards,
   reviewFlashcard,
   recordMistakeFlashcard,
   getDueFlashcards,
@@ -133,6 +134,48 @@ describe('Phase 9: Practice, Progress, Mastery and Rewards Integration', () => {
     const sub2 = await submitPracticeCode(testUserId, 'two-sum-array', 'class Solution {}', mock);
     expect(sub2.passed).toBe(true);
     expect(sub2.xpAwarded).toBe(0); // 0 duplicate XP!
+  });
+
+  it('LOW 2: advances daily streak on repeat successful practice on next eligible day without duplicate XP', async () => {
+    await prisma.userProgress.deleteMany({ where: { userId: testUserId } });
+    await prisma.userReward.deleteMany({ where: { userId: testUserId } });
+
+    // 1. First completion: awards 100 XP and starts streak at 1
+    const res1 = await awardPracticeProgressRewards(testUserId, 'two-sum-array');
+    expect(res1.xpAwarded).toBe(100);
+    expect(res1.newXp).toBe(100);
+    expect(res1.streakDays).toBe(1);
+
+    const reward1 = await prisma.userReward.findUnique({ where: { userId: testUserId } });
+    expect(reward1?.streakDays).toBe(1);
+    expect(reward1?.xp).toBe(100);
+
+    // 2. Repeated completion on the SAME day: 0 XP, streak does NOT increase repeatedly
+    const res2 = await awardPracticeProgressRewards(testUserId, 'two-sum-array');
+    expect(res2.xpAwarded).toBe(0);
+    expect(res2.newXp).toBe(100);
+    expect(res2.streakDays).toBe(1);
+
+    // 3. Repeated completion on the NEXT eligible day: advances streak to 2, still 0 duplicate XP
+    const yesterdayDate = new Date(Date.now() - 24 * 3600 * 1000);
+    const yesterdayUtc = yesterdayDate.toISOString().slice(0, 10);
+
+    await prisma.userReward.update({
+      where: { userId: testUserId },
+      data: {
+        lastActivityDate: yesterdayUtc,
+        streakDays: 1,
+      },
+    });
+
+    const res3 = await awardPracticeProgressRewards(testUserId, 'two-sum-array');
+    expect(res3.xpAwarded).toBe(0); // One-time XP preserved
+    expect(res3.newXp).toBe(100);
+    expect(res3.streakDays).toBe(2); // Streak advanced on repeat completion!
+
+    const reward3 = await prisma.userReward.findUnique({ where: { userId: testUserId } });
+    expect(reward3?.streakDays).toBe(2);
+    expect(reward3?.lastActivityDate).toBe(new Date().toISOString().slice(0, 10));
   });
 
   it('calculates streaks correctly', () => {

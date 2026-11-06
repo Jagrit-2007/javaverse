@@ -582,6 +582,13 @@ model KbItem {
 
   candidate   KbCandidate? @relation(fields: [candidateId], references: [id], onDelete: Cascade)
 
+  // Intentional Raw SQL GIN Index Exception:
+  // The PostgreSQL full-text search index:
+  //   CREATE INDEX "kb_items_search_idx" ON "kb_items" USING gin(to_tsvector('english', "title" || ' ' || "content"));
+  // was created in migration 20261106020000_evaluation_quality_kb.
+  // Prisma Schema DSL does not support functional/expression GIN indexes (expressions with string concatenation and functions).
+  // This index is preserved in the database and explicitly asserted in scripts/verify-clean-db.mjs.
+  // Do NOT add a Prisma migration that alters or drops this index.
   @@index([published])
   @@index([topic])
   @@map("kb_items")
