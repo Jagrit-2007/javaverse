@@ -142,6 +142,17 @@ try {
   }
   console.log('  Confirmed: User displayName persistence verified');
 
+  // Verify raw expression GIN index exists on kb_items (intentional raw SQL exception in schema.prisma)
+  const kbIndexes = await prisma.$queryRaw`
+    SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'kb_items' AND indexname = 'kb_items_search_idx';
+  `;
+  if (!Array.isArray(kbIndexes) || kbIndexes.length !== 1) {
+    throw new Error(
+      'Schema drift: Expected raw expression GIN index kb_items_search_idx on kb_items table',
+    );
+  }
+  console.log('  Confirmed: Raw expression GIN index kb_items_search_idx verified');
+
   await prisma.$disconnect();
 
   // 6. Cleanup test database

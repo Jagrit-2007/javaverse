@@ -67,4 +67,15 @@ describe('Environment validation', () => {
     });
     expect(config.NODE_ENV).toBe('production');
   });
+
+  it('rejects E2E_FIXTURES_ENABLED=true in production environment', () => {
+    expect(() =>
+      validateEnv({
+        ...validBaseEnv,
+        NODE_ENV: 'production',
+        ALLOW_LOCAL_SERVICES_IN_PRODUCTION: 'true',
+        E2E_FIXTURES_ENABLED: 'true',
+      }),
+    ).toThrow(ConfigValidationError);
+  });
 });

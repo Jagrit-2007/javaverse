@@ -11,3 +11,5 @@ export * from './rateLimit';
 export * from './audit';
 export * from './redirects';
 export * from './email';
+export * from './magicBytes';
+export * from './piiScrubber';

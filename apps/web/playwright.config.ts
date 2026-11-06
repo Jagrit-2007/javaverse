@@ -20,7 +20,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'ALLOW_LOCAL_SERVICES_IN_PRODUCTION=true E2E_FIXTURES_ENABLED=true pnpm run start',
+    command: 'ALLOW_LOCAL_SERVICES_IN_PRODUCTION=true pnpm run start',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 60 * 1000,

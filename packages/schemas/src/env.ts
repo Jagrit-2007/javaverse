@@ -69,14 +69,23 @@ export const EnvSchema = z
       .transform((val) => val === 'true'),
 
     ALLOW_LOCAL_SERVICES_IN_PRODUCTION: z.string().optional(),
+    E2E_FIXTURES_ENABLED: z.string().optional(),
   })
   .superRefine((data, ctx) => {
-    // Phase 1 execution policy strictly requires mock providers
-    if (data.AI_PROVIDER_PRIMARY !== 'mock') {
+    // AI Provider credential validation
+    if (data.AI_PROVIDER_PRIMARY === 'anthropic' && !data.ANTHROPIC_API_KEY) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['AI_PROVIDER_PRIMARY'],
-        message: 'Phase 1 runtime policy strictly requires AI_PROVIDER_PRIMARY=mock',
+        path: ['ANTHROPIC_API_KEY'],
+        message: 'ANTHROPIC_API_KEY is required when AI_PROVIDER_PRIMARY=anthropic',
+      });
+    }
+
+    if (data.AI_PROVIDER_PRIMARY === 'gemini' && !data.GEMINI_API_KEY) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['GEMINI_API_KEY'],
+        message: 'GEMINI_API_KEY is required when AI_PROVIDER_PRIMARY=gemini',
       });
     }
 
@@ -90,6 +99,14 @@ export const EnvSchema = z
 
     // Production guardrails
     if (data.NODE_ENV === 'production') {
+      if (data.E2E_FIXTURES_ENABLED === 'true') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['E2E_FIXTURES_ENABLED'],
+          message: 'E2E_FIXTURES_ENABLED=true is strictly prohibited when NODE_ENV=production',
+        });
+      }
+
       const secrets = [
         { key: 'SESSION_SECRET', val: data.SESSION_SECRET },
         { key: 'CURSOR_SIGNING_SECRET', val: data.CURSOR_SIGNING_SECRET },

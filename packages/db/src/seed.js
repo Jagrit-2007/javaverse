@@ -2,6 +2,8 @@ import { PrismaClient } from '@prisma/client';
 import dotenv from 'dotenv';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { LAUNCH_LESSONS } from './data/lessons.ts';
+import { PRACTICE_PROBLEMS } from './data/problems.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -30,6 +32,98 @@ async function main() {
   console.log(
     `Seeded deployment_limits singleton: max_users=${limits.maxUsers}, registration_mode=${limits.registrationMode}`,
   );
+
+  let seededCount = 0;
+  for (const lesson of LAUNCH_LESSONS) {
+    await prisma.curriculumLesson.upsert({
+      where: { slug: lesson.slug },
+      update: {
+        title: lesson.title,
+        track: lesson.track,
+        module: lesson.module,
+        orderIndex: lesson.orderIndex,
+        published: lesson.published,
+        difficulty: lesson.difficulty,
+        estimatedMinutes: lesson.estimatedMinutes,
+        hook: lesson.hook,
+        contentSimple: lesson.contentSimple,
+        contentStandard: lesson.contentStandard,
+        contentDeep: lesson.contentDeep,
+        visualization: lesson.visualization,
+        codeStarter: lesson.codeStarter,
+        codeSolution: lesson.codeSolution,
+        commonMistakes: lesson.commonMistakes,
+        quiz: lesson.quiz,
+        challenge: lesson.challenge,
+        javaVersion: lesson.javaVersion,
+        metadata: lesson.metadata,
+      },
+      create: {
+        slug: lesson.slug,
+        title: lesson.title,
+        track: lesson.track,
+        module: lesson.module,
+        orderIndex: lesson.orderIndex,
+        published: lesson.published,
+        difficulty: lesson.difficulty,
+        estimatedMinutes: lesson.estimatedMinutes,
+        hook: lesson.hook,
+        contentSimple: lesson.contentSimple,
+        contentStandard: lesson.contentStandard,
+        contentDeep: lesson.contentDeep,
+        visualization: lesson.visualization,
+        codeStarter: lesson.codeStarter,
+        codeSolution: lesson.codeSolution,
+        commonMistakes: lesson.commonMistakes,
+        quiz: lesson.quiz,
+        challenge: lesson.challenge,
+        javaVersion: lesson.javaVersion,
+        metadata: lesson.metadata,
+      },
+    });
+    seededCount++;
+  }
+
+  console.log(`Seeded ${seededCount} curriculum lessons successfully.`);
+
+  let seededProblemsCount = 0;
+  for (const prob of PRACTICE_PROBLEMS) {
+    await prisma.practiceProblem.upsert({
+      where: { slug: prob.slug },
+      update: {
+        title: prob.title,
+        topic: prob.topic,
+        difficulty: prob.difficulty,
+        orderIndex: prob.orderIndex,
+        prompt: prob.prompt,
+        starterCode: prob.starterCode,
+        solutionCode: prob.solutionCode,
+        sampleTests: prob.sampleTests,
+        hiddenTests: prob.hiddenTests,
+        hints: prob.hints,
+        testHarness: prob.testHarness,
+        published: prob.published,
+      },
+      create: {
+        slug: prob.slug,
+        title: prob.title,
+        topic: prob.topic,
+        difficulty: prob.difficulty,
+        orderIndex: prob.orderIndex,
+        prompt: prob.prompt,
+        starterCode: prob.starterCode,
+        solutionCode: prob.solutionCode,
+        sampleTests: prob.sampleTests,
+        hiddenTests: prob.hiddenTests,
+        hints: prob.hints,
+        testHarness: prob.testHarness,
+        published: prob.published,
+      },
+    });
+    seededProblemsCount++;
+  }
+
+  console.log(`Seeded ${seededProblemsCount} practice problems successfully.`);
 }
 
 main()

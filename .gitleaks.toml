@@ -14,4 +14,17 @@ paths = [
   '''(^|/)\.env\.local$''',
   '''(^|/)packages/db/\.env$''',
   '''(^|/)\.next/.*''',
+  '''(^|/)\.turbo/.*''',
+]
+
+[[rules]]
+id = "jwt"
+[rules.allowlist]
+description = "Narrowly scoped allowlist for the synthetic test JWT fixture in piiScrubber.test.ts"
+condition = "AND"
+paths = [
+  '''(^|/)packages/security/test/piiScrubber\.test\.ts$''',
+]
+regexes = [
+  '''^eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.eyJzdWIiOiIxMjM0NTY3ODkwIn0\.doNotLeakThisSignature12345$''',
 ]

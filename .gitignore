@@ -36,7 +36,7 @@ Thumbs.db
 *.sql.gz
 
 # Uploads
-uploads/
+/uploads/
 
 # TypeScript incremental build state
 *.tsbuildinfo

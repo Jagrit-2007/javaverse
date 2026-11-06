@@ -12,6 +12,7 @@ import {
   BarChart3,
   FileText,
   Settings,
+  ShieldAlert,
 } from 'lucide-react';
 import { Logo } from '../brand/Logo';
 import styles from './Sidebar.module.css';
@@ -51,6 +52,11 @@ export function Sidebar({ user }: SidebarProps) {
     : 'Workspace Member';
   const initial = displayName.charAt(0).toUpperCase();
 
+  const navItems =
+    user?.role === 'OWNER'
+      ? [...SIDEBAR_NAV_ITEMS, { label: 'Admin', href: '/dashboard/admin', icon: ShieldAlert }]
+      : SIDEBAR_NAV_ITEMS;
+
   return (
     <aside className={styles.sidebar} aria-label="Desktop Sidebar Navigation">
       <div className={styles.brandWrapper}>
@@ -61,7 +67,7 @@ export function Sidebar({ user }: SidebarProps) {
 
       <nav className={styles.nav} aria-label="Dashboard navigation">
         <ul className={styles.navList}>
-          {SIDEBAR_NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             const Icon = item.icon;
             const isActive =
               item.href === '/dashboard'

@@ -18,7 +18,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     if (process.env.E2E_FIXTURES_ENABLED === 'true') {
       const mockUser = {
         displayName: 'Demo User',
-        role: 'OWNER',
+        role: 'MEMBER',
         email: 'demo@javaverse.local',
       };
       return (
