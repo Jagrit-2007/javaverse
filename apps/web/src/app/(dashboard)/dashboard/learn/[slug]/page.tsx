@@ -1,7 +1,7 @@
 import React from 'react';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { getLessonBySlug } from '@/lib/lessons';
+import { getLessonBySlug, toPublicLessonDetail } from '@/lib/lessons';
 import { LessonView } from './LessonView';
 
 interface Props {
@@ -34,7 +34,7 @@ export default async function LessonPage({ params }: Props) {
 
   return (
     <div style={{ padding: 'var(--space-6) var(--space-4)' }}>
-      <LessonView lesson={lesson} />
+      <LessonView lesson={toPublicLessonDetail(lesson)} />
     </div>
   );
 }

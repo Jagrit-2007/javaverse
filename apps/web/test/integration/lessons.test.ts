@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { NextRequest } from 'next/server';
+import { prisma } from '@javaverse/db';
 import {
   getLessonsList,
   getLessonBySlug,
@@ -8,6 +10,12 @@ import {
   runPlaygroundCode,
 } from '@/lib/lessons';
 import { MockSandboxClient } from '@javaverse/sandbox';
+import { GET as handleGetLesson } from '@/app/api/v1/lessons/[slug]/route';
+import { POST as handleQuizSubmit } from '@/app/api/v1/lessons/[slug]/quiz/route';
+import { POST as handleChallengeSubmit } from '@/app/api/v1/lessons/[slug]/challenge/route';
+import { generateSessionTokens, createSessionRow, SESSION_COOKIE_NAME } from '@/lib/auth';
+import { generateSessionCsrfToken } from '@javaverse/security';
+import { getServerKeys } from '@/lib/keys';
 
 describe('Phase 8: Curriculum & Lessons Integration', () => {
   it('loads all 12 published lessons across 4 tracks', async () => {
@@ -113,5 +121,183 @@ describe('Phase 8: Curriculum & Lessons Integration', () => {
     const result = await runPlaygroundCode('public class Main {}', '21', mock);
     expect(result.passed).toBe(true);
     expect(result.stdout).toContain('Mock Execution Output');
+  });
+
+  describe('Lesson Assessment Data Protection & Public DTO Allowlisting', () => {
+    it('ensures GET /api/v1/lessons/[slug] strips private assessment data for unauthenticated requests', async () => {
+      const req = new NextRequest('http://localhost:3000/api/v1/lessons/primitive-types');
+      const res = await handleGetLesson(req, {
+        params: Promise.resolve({ slug: 'primitive-types' }),
+      });
+
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.data).toBeDefined();
+      const lesson = json.data.lesson;
+
+      expect(lesson.slug).toBe('primitive-types');
+      expect(lesson.challenge.prompt).toBeTruthy();
+      expect(lesson.challenge.starterCode).toBeTruthy();
+
+      // Assert private assessment fields are not exposed
+      expect(lesson.challenge).not.toHaveProperty('solutionCode');
+      expect(lesson.challenge).not.toHaveProperty('testCode');
+      expect(lesson).not.toHaveProperty('codeSolution');
+
+      // Assert quiz questions do not leak answerIndex or explanation before submission
+      expect(lesson.quiz.length).toBe(5);
+      for (const q of lesson.quiz) {
+        expect(q).toHaveProperty('id');
+        expect(q).toHaveProperty('question');
+        expect(q).toHaveProperty('options');
+        expect(q).not.toHaveProperty('answerIndex');
+        expect(q).not.toHaveProperty('explanation');
+      }
+
+      // Assert raw JSON payload contains zero references to private fields
+      const rawText = JSON.stringify(json);
+      expect(rawText).not.toContain('answerIndex');
+      expect(rawText).not.toContain('solutionCode');
+      expect(rawText).not.toContain('testCode');
+    });
+
+    it('ensures GET /api/v1/lessons/[slug] strips private assessment data for authenticated requests', async () => {
+      const user = await prisma.user.create({
+        data: {
+          email: `lesson-tester-${Math.random().toString(36).substring(2)}@example.com`,
+          role: 'MEMBER',
+          status: 'ACTIVE',
+        },
+      });
+      const tokens = generateSessionTokens();
+      await createSessionRow({
+        userId: user.id,
+        tokenDigest: tokens.tokenDigest,
+        publicId: tokens.publicId,
+      });
+
+      const req = new NextRequest('http://localhost:3000/api/v1/lessons/primitive-types', {
+        headers: {
+          cookie: `${SESSION_COOKIE_NAME}=${tokens.rawToken}`,
+        },
+      });
+      const res = await handleGetLesson(req, {
+        params: Promise.resolve({ slug: 'primitive-types' }),
+      });
+
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.data).toBeDefined();
+      const lesson = json.data.lesson;
+
+      expect(lesson.challenge).not.toHaveProperty('solutionCode');
+      expect(lesson.challenge).not.toHaveProperty('testCode');
+      expect(lesson).not.toHaveProperty('codeSolution');
+
+      for (const q of lesson.quiz) {
+        expect(q).not.toHaveProperty('answerIndex');
+        expect(q).not.toHaveProperty('explanation');
+      }
+
+      const rawText = JSON.stringify(json);
+      expect(rawText).not.toContain('answerIndex');
+      expect(rawText).not.toContain('solutionCode');
+      expect(rawText).not.toContain('testCode');
+    });
+
+    it('ensures quiz submission evaluates against server-side answer keys and reveals explanations only post-submission', async () => {
+      const user = await prisma.user.create({
+        data: {
+          email: `quiz-grader-${Math.random().toString(36).substring(2)}@example.com`,
+          role: 'MEMBER',
+          status: 'ACTIVE',
+        },
+      });
+      const tokens = generateSessionTokens();
+      await createSessionRow({
+        userId: user.id,
+        tokenDigest: tokens.tokenDigest,
+        publicId: tokens.publicId,
+      });
+
+      const keys = await getServerKeys();
+      const csrfToken = generateSessionCsrfToken(tokens.publicId, keys.csrfHmacKey);
+
+      const lessonRecord = await getLessonBySlug('primitive-types');
+      expect(lessonRecord).not.toBeNull();
+      const answers: Record<string, number> = {};
+      for (const q of lessonRecord!.quiz) {
+        answers[q.id] = q.answerIndex;
+      }
+
+      // Submit answers using server-side grading
+      const req = new NextRequest('http://localhost:3000/api/v1/lessons/primitive-types/quiz', {
+        method: 'POST',
+        headers: {
+          cookie: `${SESSION_COOKIE_NAME}=${tokens.rawToken}`,
+          'x-csrf-token': csrfToken,
+          'content-type': 'application/json',
+          origin: 'http://localhost:3000',
+        },
+        body: JSON.stringify({ answers }),
+      });
+
+      const res = await handleQuizSubmit(req, {
+        params: Promise.resolve({ slug: 'primitive-types' }),
+      });
+
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.data).toBeDefined();
+      expect(json.data.result.passed).toBe(true);
+      expect(json.data.result.score).toBe(5);
+      expect(json.data.result.results.length).toBe(5);
+      // Explanations are returned post-submission in the evaluation result
+      expect(json.data.result.results[0].explanation).toBeTruthy();
+    });
+
+    it('ensures challenge grading executes against server-side test code harness', async () => {
+      const user = await prisma.user.create({
+        data: {
+          email: `challenge-grader-${Math.random().toString(36).substring(2)}@example.com`,
+          role: 'MEMBER',
+          status: 'ACTIVE',
+        },
+      });
+      const tokens = generateSessionTokens();
+      await createSessionRow({
+        userId: user.id,
+        tokenDigest: tokens.tokenDigest,
+        publicId: tokens.publicId,
+      });
+
+      const keys = await getServerKeys();
+      const csrfToken = generateSessionCsrfToken(tokens.publicId, keys.csrfHmacKey);
+
+      const req = new NextRequest(
+        'http://localhost:3000/api/v1/lessons/primitive-types/challenge',
+        {
+          method: 'POST',
+          headers: {
+            cookie: `${SESSION_COOKIE_NAME}=${tokens.rawToken}`,
+            'x-csrf-token': csrfToken,
+            'content-type': 'application/json',
+            origin: 'http://localhost:3000',
+          },
+          body: JSON.stringify({
+            code: 'public class Solution { public static int add(int a, int b) { return a + b; } }',
+          }),
+        },
+      );
+
+      const res = await handleChallengeSubmit(req, {
+        params: Promise.resolve({ slug: 'primitive-types' }),
+      });
+
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.data).toBeDefined();
+      expect(json.data.result.passed).toBe(true);
+    });
   });
 });

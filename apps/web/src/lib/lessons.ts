@@ -3,6 +3,7 @@ import { getSandboxClient, type SandboxClient } from '@javaverse/sandbox';
 import type {
   CurriculumLessonSummary,
   CurriculumLessonDetail,
+  PublicCurriculumLessonDetail,
   LessonQuizQuestion,
   QuizResult,
   ChallengeResult,
@@ -48,6 +49,44 @@ export async function getLessonBySlug(slug: string): Promise<CurriculumLessonDet
   }
 
   return lesson as unknown as CurriculumLessonDetail;
+}
+
+/**
+ * Transforms an internal lesson detail into a safe public DTO using an explicit allowlist.
+ * Ensures answerIndex, quiz explanation, challenge solutionCode, challenge testCode,
+ * and codeSolution never leak to the client.
+ */
+export function toPublicLessonDetail(lesson: CurriculumLessonDetail): PublicCurriculumLessonDetail {
+  return {
+    id: lesson.id,
+    slug: lesson.slug,
+    title: lesson.title,
+    track: lesson.track,
+    module: lesson.module,
+    orderIndex: lesson.orderIndex,
+    published: lesson.published,
+    difficulty: lesson.difficulty,
+    estimatedMinutes: lesson.estimatedMinutes,
+    hook: lesson.hook,
+    contentSimple: lesson.contentSimple,
+    contentStandard: lesson.contentStandard,
+    contentDeep: lesson.contentDeep,
+    visualization: lesson.visualization,
+    codeStarter: lesson.codeStarter,
+    commonMistakes: lesson.commonMistakes,
+    quiz: lesson.quiz.map((q) => ({
+      id: q.id,
+      question: q.question,
+      options: q.options,
+    })),
+    challenge: {
+      prompt: lesson.challenge.prompt,
+      starterCode: lesson.challenge.starterCode,
+      hints: lesson.challenge.hints ?? [],
+    },
+    javaVersion: lesson.javaVersion,
+    metadata: lesson.metadata,
+  };
 }
 
 /**

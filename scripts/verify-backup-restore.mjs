@@ -89,15 +89,112 @@ try {
     { stdio: 'inherit' },
   );
 
-  // 4. Restore backup into destination database
-  console.log(`4. Executing restore script into '${TEST_RESTORE_DB}'...`);
-  execSync(`bash scripts/restore-db.sh "${backupPath}" "${TEST_RESTORE_DB}"`, {
+  // 4. Verify hardened safety checks
+  console.log('4. Verifying restore-db.sh safety checks...');
+
+  // 4.1 Missing checksum rejection
+  console.log('  Testing missing checksum rejection...');
+  const fakeBackup = path.join(BACKUP_TMP_DIR, 'no_checksum.sql');
+  fs.writeFileSync(fakeBackup, 'SELECT 1;');
+  try {
+    execSync(`bash scripts/restore-db.sh --yes --target-db "${TEST_RESTORE_DB}" "${fakeBackup}"`, {
+      cwd: rootDir,
+      stdio: 'pipe',
+    });
+    throw new Error('Expected missing checksum to fail');
+  } catch (err) {
+    if (!String(err.stderr || err.message).includes('missing')) {
+      throw new Error(`Unexpected error for missing checksum: ${err.message}`);
+    }
+  }
+
+  // 4.2 Invalid checksum rejection
+  console.log('  Testing invalid checksum rejection...');
+  const corruptChecksumFile = path.join(BACKUP_TMP_DIR, 'corrupt.sql');
+  fs.writeFileSync(corruptChecksumFile, 'SELECT 1;');
+  fs.writeFileSync(
+    `${corruptChecksumFile}.sha256`,
+    '0000000000000000000000000000000000000000000000000000000000000000  corrupt.sql\n',
+  );
+  try {
+    execSync(
+      `bash scripts/restore-db.sh --yes --target-db "${TEST_RESTORE_DB}" "${corruptChecksumFile}"`,
+      {
+        cwd: rootDir,
+        stdio: 'pipe',
+      },
+    );
+    throw new Error('Expected corrupt checksum to fail');
+  } catch (err) {
+    if (!String(err.stderr || err.message).includes('Checksum verification failed')) {
+      throw new Error(`Unexpected error for corrupt checksum: ${err.message}`);
+    }
+  }
+
+  // 4.3 Protected database name rejection
+  console.log('  Testing protected database rejection...');
+  try {
+    execSync(`bash scripts/restore-db.sh --yes --target-db "postgres" "${backupPath}"`, {
+      cwd: rootDir,
+      stdio: 'pipe',
+    });
+    throw new Error('Expected protected database rejection to fail');
+  } catch (err) {
+    if (!String(err.stderr || err.message).includes('protected')) {
+      throw new Error(`Unexpected error for protected db: ${err.message}`);
+    }
+  }
+
+  // 4.4 Non-interactive missing --yes rejection
+  console.log('  Testing non-interactive missing --yes rejection...');
+  try {
+    execSync(`bash scripts/restore-db.sh --target-db "${TEST_RESTORE_DB}" "${backupPath}"`, {
+      cwd: rootDir,
+      stdio: 'pipe',
+    });
+    throw new Error('Expected missing --yes to fail in non-interactive mode');
+  } catch (err) {
+    if (!String(err.stderr || err.message).includes('--yes')) {
+      throw new Error(`Unexpected error for missing --yes: ${err.message}`);
+    }
+  }
+
+  // 4.5 Non-interactive missing --target-db rejection
+  console.log('  Testing non-interactive missing --target-db rejection...');
+  try {
+    execSync(`bash scripts/restore-db.sh --yes "${backupPath}" "${TEST_RESTORE_DB}"`, {
+      cwd: rootDir,
+      stdio: 'pipe',
+    });
+    throw new Error('Expected missing --target-db to fail in non-interactive mode');
+  } catch (err) {
+    if (!String(err.stderr || err.message).includes('--target-db')) {
+      throw new Error(`Unexpected error for missing --target-db: ${err.message}`);
+    }
+  }
+
+  // 4.6 Dry run verification
+  console.log('  Testing --dry-run mode...');
+  const dryRunOutput = execSync(
+    `bash scripts/restore-db.sh --dry-run --target-db "${TEST_RESTORE_DB}" "${backupPath}"`,
+    {
+      cwd: rootDir,
+      encoding: 'utf8',
+    },
+  );
+  if (!dryRunOutput.includes('Dry run completed successfully')) {
+    throw new Error('Dry run output did not report success');
+  }
+
+  // 5. Restore backup into destination scratch database
+  console.log(`5. Executing hardened restore script into '${TEST_RESTORE_DB}'...`);
+  execSync(`bash scripts/restore-db.sh --yes --target-db "${TEST_RESTORE_DB}" "${backupPath}"`, {
     cwd: rootDir,
     stdio: 'inherit',
   });
 
-  // 5. Connect and assert all data matches exactly
-  console.log('5. Validating restored database integrity and row counts...');
+  // 6. Connect and assert all data matches exactly
+  console.log('6. Validating restored database integrity and row counts...');
   restoreClient = new PrismaClient({
     datasources: { db: { url: RESTORE_DB_URL } },
   });

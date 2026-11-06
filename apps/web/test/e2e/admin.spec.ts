@@ -1,6 +1,11 @@
 import { test, expect } from '@playwright/test';
+import { authenticateAsOwner } from './helpers/auth';
 
 test.describe('Phase 10: Owner Administration, Quality & Evaluation Console', () => {
+  test.beforeEach(async ({ context }) => {
+    await authenticateAsOwner(context);
+  });
+
   test('root /admin redirects to /dashboard/admin', async ({ page }) => {
     await page.goto('/admin');
     await expect(page).toHaveURL(/.*\/dashboard\/admin/);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PedagogicalAnalysisSchema } from '../src/ai';
+import { PedagogicalAnalysisSchema, AnalysisJobDataSchema } from '../src/ai';
 
 describe('PedagogicalAnalysisSchema', () => {
   const validAnalysis = {
@@ -74,5 +74,30 @@ describe('PedagogicalAnalysisSchema', () => {
   it('rejects analysis with invalid schema version', () => {
     const invalid = { ...validAnalysis, schemaVersion: 2 };
     expect(() => PedagogicalAnalysisSchema.parse(invalid)).toThrow();
+  });
+
+  describe('AnalysisJobDataSchema', () => {
+    it('validates a correct job payload with UUIDs and correlation ID', () => {
+      const payload = {
+        jobId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+        chatId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12',
+        userId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13',
+        messageId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14',
+        correlationId: 'corr-12345',
+      };
+      const parsed = AnalysisJobDataSchema.parse(payload);
+      expect(parsed.jobId).toBe(payload.jobId);
+      expect(parsed.messageId).toBe(payload.messageId);
+    });
+
+    it('rejects payload missing messageId or non-UUID format', () => {
+      const invalid = {
+        jobId: 'not-a-uuid',
+        chatId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12',
+        userId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13',
+        correlationId: 'corr-12345',
+      };
+      expect(() => AnalysisJobDataSchema.parse(invalid)).toThrow();
+    });
   });
 });

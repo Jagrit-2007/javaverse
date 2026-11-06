@@ -4,6 +4,32 @@ import { VisualizationSpecSchema } from './ai';
 export const TrackEnum = z.enum(['foundations', 'oop', 'dsa', 'advanced_java']);
 export type Track = z.infer<typeof TrackEnum>;
 
+export const CANONICAL_TRACKS = ['foundations', 'oop', 'dsa', 'advanced_java'] as const;
+export type CanonicalTrack = (typeof CANONICAL_TRACKS)[number];
+
+export const TRACK_TOPIC_MAP = {
+  foundations: {
+    track: 'foundations',
+    practiceTopic: 'CORE_JAVA',
+    label: 'Core Java',
+  },
+  oop: {
+    track: 'oop',
+    practiceTopic: 'OOP',
+    label: 'Object-Oriented Programming',
+  },
+  dsa: {
+    track: 'dsa',
+    practiceTopic: 'DSA',
+    label: 'Data Structures & Algorithms',
+  },
+  advanced_java: {
+    track: 'advanced_java',
+    practiceTopic: 'ADVANCED_JAVA',
+    label: 'Advanced Java',
+  },
+} as const;
+
 export const LessonDifficultyEnum = z.enum(['EASY', 'MEDIUM', 'HARD']);
 export type LessonDifficulty = z.infer<typeof LessonDifficultyEnum>;
 
@@ -15,6 +41,13 @@ export const LessonQuizQuestionSchema = z.object({
   explanation: z.string().min(1),
 });
 export type LessonQuizQuestion = z.infer<typeof LessonQuizQuestionSchema>;
+
+export const PublicLessonQuizQuestionSchema = z.object({
+  id: z.string().min(1),
+  question: z.string().min(1),
+  options: z.array(z.string().min(1)).min(2).max(6),
+});
+export type PublicLessonQuizQuestion = z.infer<typeof PublicLessonQuizQuestionSchema>;
 
 export const LessonCommonMistakeSchema = z.object({
   mistake: z.string().min(1),
@@ -32,6 +65,13 @@ export const LessonChallengeSchema = z.object({
   hints: z.array(z.string()).default([]),
 });
 export type LessonChallenge = z.infer<typeof LessonChallengeSchema>;
+
+export const PublicLessonChallengeSchema = z.object({
+  prompt: z.string().min(1),
+  starterCode: z.string().min(1),
+  hints: z.array(z.string()).default([]),
+});
+export type PublicLessonChallenge = z.infer<typeof PublicLessonChallengeSchema>;
 
 export const LessonMetadataSchema = z.object({
   author: z.string().min(1),
@@ -70,6 +110,20 @@ export const CurriculumLessonDetailSchema = CurriculumLessonSummarySchema.extend
   metadata: LessonMetadataSchema,
 });
 export type CurriculumLessonDetail = z.infer<typeof CurriculumLessonDetailSchema>;
+
+export const PublicCurriculumLessonDetailSchema = CurriculumLessonSummarySchema.extend({
+  contentSimple: z.string().min(1),
+  contentStandard: z.string().min(1),
+  contentDeep: z.string().min(1),
+  visualization: VisualizationSpecSchema,
+  codeStarter: z.string().min(1),
+  commonMistakes: z.array(LessonCommonMistakeSchema),
+  quiz: z.array(PublicLessonQuizQuestionSchema).length(5),
+  challenge: PublicLessonChallengeSchema,
+  javaVersion: z.string().default('21'),
+  metadata: LessonMetadataSchema,
+});
+export type PublicCurriculumLessonDetail = z.infer<typeof PublicCurriculumLessonDetailSchema>;
 
 export const QuizSubmissionSchema = z.object({
   answers: z.record(z.string(), z.number().int().min(0)),

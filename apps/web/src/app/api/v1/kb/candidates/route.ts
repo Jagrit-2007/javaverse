@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
   }
 
   const csrf = validateCsrf(request, { sessionId: auth.session.publicId });
-  if (!csrf.valid && process.env.E2E_FIXTURES_ENABLED !== 'true') {
+  if (!csrf.valid) {
     return jsonError('CSRF_ERROR', csrf.reason || 'Invalid CSRF token', 403);
   }
 

@@ -69,6 +69,7 @@ export const EnvSchema = z
       .transform((val) => val === 'true'),
 
     ALLOW_LOCAL_SERVICES_IN_PRODUCTION: z.string().optional(),
+    E2E_FIXTURES_ENABLED: z.string().optional(),
   })
   .superRefine((data, ctx) => {
     // AI Provider credential validation
@@ -98,6 +99,14 @@ export const EnvSchema = z
 
     // Production guardrails
     if (data.NODE_ENV === 'production') {
+      if (data.E2E_FIXTURES_ENABLED === 'true') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['E2E_FIXTURES_ENABLED'],
+          message: 'E2E_FIXTURES_ENABLED=true is strictly prohibited when NODE_ENV=production',
+        });
+      }
+
       const secrets = [
         { key: 'SESSION_SECRET', val: data.SESSION_SECRET },
         { key: 'CURSOR_SIGNING_SECRET', val: data.CURSOR_SIGNING_SECRET },

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { prisma } from '@javaverse/db';
 import {
   getPracticeProblemsList,
@@ -11,6 +11,7 @@ import {
   reviewFlashcard,
   recordMistakeFlashcard,
   getDueFlashcards,
+  getUserProgressOverview,
 } from '@/lib/progress';
 import { saveLibraryItem, getLibraryItems } from '@/lib/library';
 import { getUserSettings, updateUserSettings, generateUserDataExport } from '@/lib/settings';
@@ -211,5 +212,197 @@ describe('Phase 9: Practice, Progress, Mastery and Rewards Integration', () => {
     expect(exportData.user).toBeDefined();
     expect(exportData.submissions).toBeDefined();
     expect(exportData.progress).toBeDefined();
+  });
+
+  describe('Topic Mastery Calculation and Track Scoping (High Fix 3)', () => {
+    let cleanLearnerId: string;
+
+    beforeAll(async () => {
+      const u = await prisma.user.upsert({
+        where: { email: 'topic_mastery_learner@javaverse.local' },
+        update: {},
+        create: {
+          email: 'topic_mastery_learner@javaverse.local',
+          displayName: 'Topic Mastery Learner',
+          role: 'MEMBER',
+        },
+      });
+      cleanLearnerId = u.id;
+    });
+
+    beforeEach(async () => {
+      await prisma.userProgress.deleteMany({ where: { userId: cleanLearnerId } });
+      await prisma.userReward.deleteMany({ where: { userId: cleanLearnerId } });
+    });
+
+    it('calculates zero progress accurately across all tracks', async () => {
+      const overview = await getUserProgressOverview(cleanLearnerId);
+      expect(overview.topicMastery).toBeDefined();
+
+      for (const track of ['foundations', 'oop', 'dsa', 'advanced_java']) {
+        const stat = overview.topicMastery[track];
+        expect(stat).toBeDefined();
+        expect(stat?.completedLessons).toBe(0);
+        expect(stat?.completedProblems).toBe(0);
+        expect(stat?.masteryPercent).toBe(0);
+        expect(stat?.tier).toBe('NOVICE');
+        expect(stat?.totalLessons).toBeGreaterThan(0);
+        expect(stat?.totalProblems).toBeGreaterThan(0);
+      }
+    });
+
+    it('calculates partial progress correctly', async () => {
+      await prisma.userProgress.create({
+        data: {
+          userId: cleanLearnerId,
+          itemType: 'lesson',
+          itemId: 'primitive-types:quiz',
+          completed: true,
+          score: 100,
+        },
+      });
+
+      const overview = await getUserProgressOverview(cleanLearnerId);
+      const foundations = overview.topicMastery['foundations'];
+      expect(foundations).toBeDefined();
+      expect(foundations?.completedLessons).toBe(1);
+      expect(foundations?.completedProblems).toBe(0);
+      const expectedTotal = foundations!.totalLessons + foundations!.totalProblems;
+      const expectedPercent = Math.round((1 / expectedTotal) * 100);
+      expect(foundations?.masteryPercent).toBe(expectedPercent);
+      expect(foundations?.masteryPercent).toBeGreaterThan(0);
+    });
+
+    it('bounds full progress to exactly 100%', async () => {
+      const oopLessons = await prisma.curriculumLesson.findMany({
+        where: { track: 'oop', published: true },
+        select: { slug: true },
+      });
+      const oopProblems = await prisma.practiceProblem.findMany({
+        where: { topic: 'OOP', published: true },
+        select: { slug: true },
+      });
+
+      for (const l of oopLessons) {
+        await prisma.userProgress.create({
+          data: {
+            userId: cleanLearnerId,
+            itemType: 'lesson',
+            itemId: `${l.slug}:quiz`,
+            completed: true,
+          },
+        });
+        await prisma.userProgress.create({
+          data: {
+            userId: cleanLearnerId,
+            itemType: 'lesson',
+            itemId: `${l.slug}:challenge`,
+            completed: true,
+          },
+        });
+      }
+
+      for (const p of oopProblems) {
+        await prisma.userProgress.create({
+          data: {
+            userId: cleanLearnerId,
+            itemType: 'problem',
+            itemId: p.slug,
+            completed: true,
+          },
+        });
+      }
+
+      const overview = await getUserProgressOverview(cleanLearnerId);
+      const oop = overview.topicMastery['oop'];
+      expect(oop?.completedLessons).toBe(oopLessons.length);
+      expect(oop?.completedProblems).toBe(oopProblems.length);
+      expect(oop?.masteryPercent).toBe(100);
+      expect(oop?.tier).toBe('MASTER');
+    });
+
+    it('isolates activity across multiple tracks without cross-topic inflation', async () => {
+      await prisma.userProgress.create({
+        data: {
+          userId: cleanLearnerId,
+          itemType: 'lesson',
+          itemId: 'primitive-types:quiz',
+          completed: true,
+        },
+      });
+
+      const dsaProblem = await prisma.practiceProblem.findFirst({
+        where: { topic: 'DSA', published: true },
+        select: { slug: true },
+      });
+      expect(dsaProblem).not.toBeNull();
+
+      await prisma.userProgress.create({
+        data: {
+          userId: cleanLearnerId,
+          itemType: 'problem',
+          itemId: dsaProblem!.slug,
+          completed: true,
+        },
+      });
+
+      const overview = await getUserProgressOverview(cleanLearnerId);
+
+      expect(overview.topicMastery['foundations']?.completedLessons).toBe(1);
+      expect(overview.topicMastery['foundations']?.completedProblems).toBe(0);
+
+      expect(overview.topicMastery['dsa']?.completedLessons).toBe(0);
+      expect(overview.topicMastery['dsa']?.completedProblems).toBe(1);
+
+      expect(overview.topicMastery['oop']?.completedLessons).toBe(0);
+      expect(overview.topicMastery['oop']?.completedProblems).toBe(0);
+      expect(overview.topicMastery['advanced_java']?.completedLessons).toBe(0);
+      expect(overview.topicMastery['advanced_java']?.completedProblems).toBe(0);
+    });
+
+    it('excludes unpublished lessons from totals and completed counts', async () => {
+      const unpublishedSlug = `unpublished-test-lesson-${Date.now()}`;
+      await prisma.curriculumLesson.create({
+        data: {
+          slug: unpublishedSlug,
+          title: 'Unpublished Lesson Draft',
+          track: 'foundations',
+          module: 'Module 1',
+          orderIndex: 999,
+          published: false,
+          difficulty: 'EASY',
+          hook: 'Draft hook',
+          contentSimple: 'Simple',
+          contentStandard: 'Standard',
+          contentDeep: 'Deep',
+          visualization: {},
+          codeStarter: 'class Draft {}',
+          commonMistakes: [],
+          quiz: { questions: [] },
+          challenge: { prompt: 'Solve draft', starterCode: '', tests: [] },
+          metadata: {},
+        },
+      });
+
+      try {
+        const overviewBefore = await getUserProgressOverview(cleanLearnerId);
+        const totalLessonsBefore = overviewBefore.topicMastery['foundations']!.totalLessons;
+
+        await prisma.userProgress.create({
+          data: {
+            userId: cleanLearnerId,
+            itemType: 'lesson',
+            itemId: `${unpublishedSlug}:quiz`,
+            completed: true,
+          },
+        });
+
+        const overviewAfter = await getUserProgressOverview(cleanLearnerId);
+        expect(overviewAfter.topicMastery['foundations']!.totalLessons).toBe(totalLessonsBefore);
+        expect(overviewAfter.topicMastery['foundations']!.completedLessons).toBe(0);
+      } finally {
+        await prisma.curriculumLesson.deleteMany({ where: { slug: unpublishedSlug } });
+      }
+    });
   });
 });

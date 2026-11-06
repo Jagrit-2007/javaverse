@@ -1,5 +1,6 @@
 import { prisma, type Prisma } from '@javaverse/db';
 import { createLogger } from '@javaverse/observability';
+import type { AnalysisJobData } from '@javaverse/schemas';
 import { analysisQueue } from './queues';
 
 const logger = createLogger({ service: 'worker' });
@@ -27,6 +28,56 @@ export async function sweepStalledJobs(): Promise<number> {
   for (const job of stalledJobs) {
     if (job.attempts < job.maxAttempts) {
       logger.warn({ jobId: job.id, attempts: job.attempts }, 'Recovering stalled job for retry');
+
+      if (!job.chatId || !job.userId) {
+        logger.error({ jobId: job.id }, 'Stalled job missing chatId or userId; marking FAILED');
+        await prisma.durableJob.update({
+          where: { id: job.id },
+          data: { status: 'FAILED', finishedAt: now },
+        });
+        continue;
+      }
+
+      // Authoritative message resolution: find the assistant message linked to this job/chat
+      let messageId: string | null = null;
+      const pendingMsg = await prisma.message.findFirst({
+        where: {
+          chatId: job.chatId,
+          role: 'ASSISTANT',
+          status: { in: ['STREAMING', 'PENDING'] },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true },
+      });
+      messageId = pendingMsg?.id ?? null;
+
+      if (!messageId) {
+        const streamEvent = await prisma.userStreamEvent.findFirst({
+          where: { jobId: job.id },
+          select: { payload: true },
+        });
+        const payload = streamEvent?.payload;
+        if (payload && typeof payload === 'object' && 'messageId' in payload) {
+          const mId = (payload as { messageId?: unknown }).messageId;
+          if (typeof mId === 'string') {
+            messageId = mId;
+          }
+        }
+      }
+
+      if (!messageId) {
+        logger.error(
+          { jobId: job.id },
+          'Cannot recover stalled job: target assistant message not found',
+        );
+        await prisma.durableJob.update({
+          where: { id: job.id },
+          data: { status: 'FAILED', finishedAt: now },
+        });
+        continue;
+      }
+
+      // Mark as PENDING and clear lease atomically (idempotency: ensures next sweep will ignore this job)
       await prisma.durableJob.update({
         where: { id: job.id },
         data: {
@@ -36,18 +87,19 @@ export async function sweepStalledJobs(): Promise<number> {
         },
       });
 
-      // Re-enqueue in BullMQ if not already queued
+      // Re-enqueue in BullMQ with validated shared schema
       try {
-        await analysisQueue.add(
-          'analyze-question',
-          {
-            jobId: job.id,
-            chatId: job.chatId,
-            userId: job.userId,
-            correlationId: job.correlationId,
-          },
-          { jobId: `${job.id}-retry-${job.attempts}` },
-        );
+        const retryJobData: AnalysisJobData = {
+          jobId: job.id,
+          chatId: job.chatId,
+          userId: job.userId,
+          messageId,
+          correlationId: job.correlationId,
+        };
+
+        await analysisQueue.add('analyze-question', retryJobData, {
+          jobId: `${job.id}-retry-${job.attempts}`,
+        });
       } catch (err) {
         logger.error({ err, jobId: job.id }, 'Failed to re-enqueue recovered job');
       }

@@ -34,7 +34,7 @@ export default async function LibraryPage() {
         data: {
           email: 'demo@javaverse.local',
           displayName: 'Demo User',
-          role: 'OWNER',
+          role: 'MEMBER',
           status: 'ACTIVE',
         },
       });

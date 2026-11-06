@@ -12,7 +12,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   }
 
   const csrf = validateCsrf(request, { sessionId: auth.sessionId });
-  if (!csrf.valid && process.env.E2E_FIXTURES_ENABLED !== 'true') {
+  if (!csrf.valid) {
     return jsonError('CSRF_ERROR', csrf.reason || 'Invalid CSRF token', 403);
   }
 

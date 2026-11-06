@@ -3,20 +3,14 @@ import { Job } from 'bullmq';
 import { prisma, type Prisma } from '@javaverse/db';
 import { createLogger, runWithCorrelationContext } from '@javaverse/observability';
 import { getSandboxClient } from '@javaverse/sandbox';
+import { AnalysisJobDataSchema, type AnalysisJobData } from '@javaverse/schemas';
 import { Redis } from 'ioredis';
 import { env } from '../env';
 
 const logger = createLogger({ service: 'worker' });
 const pubRedis = new Redis(env.REDIS_CACHE_URL, { lazyConnect: true });
 
-export interface AnalysisJobData {
-  jobId: string;
-  chatId: string;
-  userId: string;
-  messageId: string;
-  userPrompt: string;
-  correlationId: string;
-}
+export type { AnalysisJobData };
 
 const STAGES = [
   { name: 'reading', progress: 15, delayMs: 400 },
@@ -255,7 +249,13 @@ public class Solution {
  * Processor for BullMQ analysis-queue.
  */
 export async function processAnalysisJob(job: Job<AnalysisJobData>): Promise<{ status: string }> {
-  const { jobId, chatId, userId, messageId, userPrompt, correlationId } = job.data;
+  const parsed = AnalysisJobDataSchema.safeParse(job.data);
+  if (!parsed.success) {
+    logger.error({ issues: parsed.error.issues }, 'Malformed analysis job payload');
+    return { status: 'malformed_payload' };
+  }
+
+  const { jobId, chatId, userId, messageId, correlationId } = parsed.data;
 
   return runWithCorrelationContext({ correlationId }, async () => {
     logger.info({ jobId, chatId, userId }, 'Starting analysis job processing');
@@ -274,6 +274,31 @@ export async function processAnalysisJob(job: Job<AnalysisJobData>): Promise<{ s
       logger.info({ jobId }, 'Job was cancelled before execution');
       return { status: 'cancelled' };
     }
+
+    if (dbJob.status === 'COMPLETED') {
+      logger.info({ jobId }, 'Job was already completed; skipping duplicate execution');
+      return { status: 'completed' };
+    }
+
+    // Load assistant message and authoritative user prompt from PostgreSQL
+    const assistantMsg = await prisma.message.findUnique({
+      where: { id: messageId },
+      include: { parent: true },
+    });
+
+    if (!assistantMsg) {
+      logger.warn({ jobId, messageId }, 'Assistant message not found in PostgreSQL');
+      await prisma.durableJob.update({
+        where: { id: jobId },
+        data: {
+          status: 'FAILED',
+          finishedAt: new Date(),
+        },
+      });
+      return { status: 'missing_message' };
+    }
+
+    const authoritativePrompt = assistantMsg.parent?.content || parsed.data.userPrompt || '';
 
     // Mark as RUNNING with initial lease
     await prisma.durableJob.update({
@@ -344,7 +369,7 @@ export async function processAnalysisJob(job: Job<AnalysisJobData>): Promise<{ s
     }
 
     // 3. Generate Mock Analysis and Complete Job
-    const analysisData = generateMockAnalysis(userPrompt);
+    const analysisData = generateMockAnalysis(authoritativePrompt);
 
     const fullExplanation = `### Understanding & Approach
 ${analysisData.understanding.restatement}
@@ -368,9 +393,14 @@ ${analysisData.solution.code}
     const codeHash = crypto.createHash('sha256').update(analysisData.solution.code).digest('hex');
 
     await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      // Upsert Analysis record
-      const analysis = await tx.analysis.create({
-        data: {
+      // Upsert Analysis record for idempotency
+      const analysis = await tx.analysis.upsert({
+        where: { messageId },
+        update: {
+          result: analysisData as Prisma.InputJsonValue,
+          verificationStatus: execResult.status === 'SUCCESS' ? 'VERIFIED_CORRECT' : 'UNVERIFIED',
+        },
+        create: {
           messageId,
           modelId: 'mock-analyzer-v1',
           promptVersion: '1.0.0',
@@ -378,6 +408,9 @@ ${analysisData.solution.code}
           verificationStatus: execResult.status === 'SUCCESS' ? 'VERIFIED_CORRECT' : 'UNVERIFIED',
         },
       });
+
+      // Clear any prior partial execution records for messageId
+      await tx.execution.deleteMany({ where: { messageId } });
 
       // Insert Execution record
       await tx.execution.create({

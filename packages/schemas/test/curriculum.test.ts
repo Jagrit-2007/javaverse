@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   CurriculumLessonSummarySchema,
   CurriculumLessonDetailSchema,
+  PublicCurriculumLessonDetailSchema,
+  PublicLessonQuizQuestionSchema,
+  PublicLessonChallengeSchema,
   QuizSubmissionSchema,
   QuizResultSchema,
   ChallengeResultSchema,
@@ -169,5 +172,39 @@ describe('Curriculum Schemas', () => {
     });
     expect(result.passed).toBe(true);
     expect(result.exitCode).toBe(0);
+  });
+
+  it('validates public lesson detail schema without private assessment data', () => {
+    const publicDetail = {
+      ...validSummary,
+      contentSimple: '# Primitives\nSimple explanation.',
+      contentStandard: '# Standard\nStandard depth explanation.',
+      contentDeep: '# Deep\nBytecode and Hotspot internals.',
+      visualization: validDetail.visualization,
+      codeStarter: 'public class Main {}',
+      commonMistakes: validDetail.commonMistakes,
+      quiz: validDetail.quiz.map((q) => ({
+        id: q.id,
+        question: q.question,
+        options: q.options,
+      })),
+      challenge: {
+        prompt: 'Solve it',
+        starterCode: 'class Solution {}',
+        hints: ['Hint 1'],
+      },
+      javaVersion: '21',
+      metadata: validDetail.metadata,
+    };
+
+    const parsed = PublicCurriculumLessonDetailSchema.parse(publicDetail);
+    expect(parsed.slug).toBe('primitive-types');
+    expect(PublicLessonQuizQuestionSchema.parse(parsed.quiz[0])).toBeDefined();
+    expect(PublicLessonChallengeSchema.parse(parsed.challenge)).toBeDefined();
+    expect(parsed.quiz[0]).not.toHaveProperty('answerIndex');
+    expect(parsed.quiz[0]).not.toHaveProperty('explanation');
+    expect(parsed.challenge).not.toHaveProperty('solutionCode');
+    expect(parsed.challenge).not.toHaveProperty('testCode');
+    expect(parsed).not.toHaveProperty('codeSolution');
   });
 });

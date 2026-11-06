@@ -3,6 +3,7 @@ import type { SandboxClient } from '@javaverse/sandbox';
 import type { GoldenCase, EvalRunResult, EvalCaseResult } from '@javaverse/schemas';
 import { JavaVerseResponseSchema } from '@javaverse/schemas';
 import { GOLDEN_EVAL_SET } from './goldenSet';
+import { buildEvaluationHarness } from './harness';
 
 export interface EvalRunnerOptions {
   suiteName?: string;
@@ -64,20 +65,32 @@ export async function runGoldenEvaluation(
         }
       }
 
-      // 4. Sandbox code verification
-      const codeExecution = await sandboxClient.execute({
-        javaVersion: 'JAVA_21',
-        code: c.testCode,
-      });
+      // 4. Sandbox code verification using generated model solution code
+      const modelSolutionCode = response.result?.solution?.code;
+      if (
+        !modelSolutionCode ||
+        typeof modelSolutionCode !== 'string' ||
+        !modelSolutionCode.trim()
+      ) {
+        failures.push('Missing or empty generated solution code');
+      } else {
+        const combinedCode = buildEvaluationHarness(c.testCode, modelSolutionCode);
+        const codeExecution = await sandboxClient.execute({
+          javaVersion: 'JAVA_21',
+          code: combinedCode,
+        });
 
-      if (codeExecution.status !== 'SUCCESS') {
-        failures.push(`Execution failed: ${codeExecution.status} - ${codeExecution.stderr || ''}`);
-      } else if (codeExecution.exitCode !== 0) {
-        failures.push(
-          `Non-zero exit code: ${codeExecution.exitCode} - ${codeExecution.stderr || ''}`,
-        );
-      } else if (!codeExecution.stdout?.includes('PASS')) {
-        failures.push('Test harness did not report PASS');
+        if (codeExecution.status !== 'SUCCESS') {
+          failures.push(
+            `Execution failed: ${codeExecution.status} - ${codeExecution.stderr || ''}`,
+          );
+        } else if (codeExecution.exitCode !== 0) {
+          failures.push(
+            `Non-zero exit code: ${codeExecution.exitCode} - ${codeExecution.stderr || ''}`,
+          );
+        } else if (!codeExecution.stdout?.includes('PASS')) {
+          failures.push('Test harness did not report PASS');
+        }
       }
 
       // 5. Visualizer verification

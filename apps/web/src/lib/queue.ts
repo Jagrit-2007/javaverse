@@ -1,4 +1,5 @@
 import { Queue } from 'bullmq';
+import type { AnalysisJobData } from '@javaverse/schemas';
 import { getRedisQueueClient } from './redis';
 
 let analysisQueueInstance: Queue | null = null;
@@ -22,14 +23,7 @@ export function getMediaQueue(): Queue {
   return mediaQueueInstance;
 }
 
-export interface AnalysisJobPayload {
-  jobId: string;
-  chatId: string;
-  userId: string;
-  messageId: string;
-  userPrompt: string;
-  correlationId: string;
-}
+export type AnalysisJobPayload = AnalysisJobData;
 
 export interface MediaScanJobPayload {
   attachmentId: string;

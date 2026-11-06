@@ -1,5 +1,6 @@
 import { prisma } from '@javaverse/db';
 import type { UserProgressOverview, Flashcard, TopicMasteryStat } from '@javaverse/schemas';
+import { CANONICAL_TRACKS, TRACK_TOPIC_MAP } from '@javaverse/schemas';
 
 export const BADGE_DEFINITIONS: Record<
   string,
@@ -327,50 +328,99 @@ export async function getUserProgressOverview(userId: string): Promise<UserProgr
   const lastActivityDate = rewards?.lastActivityDate ?? null;
   const gamificationEnabled = rewards?.gamificationEnabled ?? true;
 
-  // Topic mastery calculation
-  const topics = ['CORE_JAVA', 'OOP', 'DSA', 'ADVANCED_JAVA'];
+  // Single batch of parallel queries to compute topic mastery without N+1 queries
+  const [publishedLessons, publishedProblems, userCompletedProgress] = await Promise.all([
+    prisma.curriculumLesson.findMany({
+      where: { published: true },
+      select: { slug: true, track: true },
+    }),
+    prisma.practiceProblem.findMany({
+      where: { published: true },
+      select: { slug: true, topic: true },
+    }),
+    prisma.userProgress.findMany({
+      where: {
+        userId,
+        completed: true,
+      },
+      select: {
+        itemType: true,
+        itemId: true,
+      },
+    }),
+  ]);
+
+  // Index published lessons by track
+  const lessonsByTrack = new Map<string, Set<string>>();
+  for (const lesson of publishedLessons) {
+    let set = lessonsByTrack.get(lesson.track);
+    if (!set) {
+      set = new Set<string>();
+      lessonsByTrack.set(lesson.track, set);
+    }
+    set.add(lesson.slug);
+  }
+
+  // Index published practice problems by topic
+  const problemsByTopic = new Map<string, Set<string>>();
+  for (const problem of publishedProblems) {
+    let set = problemsByTopic.get(problem.topic);
+    if (!set) {
+      set = new Set<string>();
+      problemsByTopic.set(problem.topic, set);
+    }
+    set.add(problem.slug);
+  }
+
+  // Collect user completed lesson slugs and problem slugs
+  const completedLessonSlugs = new Set<string>();
+  const completedProblemSlugs = new Set<string>();
+
+  for (const item of userCompletedProgress) {
+    if (item.itemType === 'lesson') {
+      const slug = item.itemId.includes(':') ? item.itemId.split(':')[0] : item.itemId;
+      if (slug) completedLessonSlugs.add(slug);
+    } else if (item.itemType === 'problem') {
+      completedProblemSlugs.add(item.itemId);
+    }
+  }
+
+  // Compute topic mastery for each canonical track
   const topicMastery: Record<string, TopicMasteryStat> = {};
 
-  for (const topic of topics) {
-    const totalLessons = await prisma.curriculumLesson.count({
-      where: { track: topic, published: true },
-    });
-    const completedLessons = await prisma.userProgress.count({
-      where: {
-        userId,
-        itemType: 'lesson',
-        completed: true,
-        itemId: { contains: ':' }, // e.g. "primitive-types:quiz"
-      },
-    });
+  for (const track of CANONICAL_TRACKS) {
+    const publishedLessonSlugs = lessonsByTrack.get(track) || new Set<string>();
+    const totalLessons = publishedLessonSlugs.size;
+    let completedLessons = 0;
+    for (const slug of publishedLessonSlugs) {
+      if (completedLessonSlugs.has(slug)) {
+        completedLessons++;
+      }
+    }
 
-    const totalProblems = await prisma.practiceProblem.count({
-      where: { topic, published: true },
-    });
-    const completedProblems = await prisma.userProgress.count({
-      where: {
-        userId,
-        itemType: 'problem',
-        completed: true,
-        itemId: {
-          in: (
-            await prisma.practiceProblem.findMany({ where: { topic }, select: { slug: true } })
-          ).map((p) => p.slug),
-        },
-      },
-    });
+    const practiceTopic = TRACK_TOPIC_MAP[track].practiceTopic;
+    const publishedProblemSlugs = problemsByTopic.get(practiceTopic) || new Set<string>();
+    const totalProblems = publishedProblemSlugs.size;
+    let completedProblems = 0;
+    for (const slug of publishedProblemSlugs) {
+      if (completedProblemSlugs.has(slug)) {
+        completedProblems++;
+      }
+    }
 
     const totalItems = totalLessons + totalProblems;
-    const completedItems = Math.min(completedLessons, totalLessons) + completedProblems;
+    const completedItems = completedLessons + completedProblems;
     const masteryPercent =
-      totalItems > 0 ? Math.min(100, Math.round((completedItems / totalItems) * 100)) : 0;
+      totalItems > 0
+        ? Math.min(100, Math.max(0, Math.round((completedItems / totalItems) * 100)))
+        : 0;
 
     let tier: 'NOVICE' | 'APPRENTICE' | 'PROFICIENT' | 'MASTER' = 'NOVICE';
     if (masteryPercent >= 85) tier = 'MASTER';
     else if (masteryPercent >= 50) tier = 'PROFICIENT';
     else if (masteryPercent >= 25) tier = 'APPRENTICE';
 
-    topicMastery[topic] = {
+    topicMastery[track] = {
       completedLessons,
       totalLessons,
       completedProblems,

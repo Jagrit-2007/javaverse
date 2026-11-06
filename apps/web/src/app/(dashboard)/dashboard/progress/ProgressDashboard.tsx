@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import type { UserProgressOverview, Flashcard } from '@javaverse/schemas';
+import { TRACK_TOPIC_MAP } from '@javaverse/schemas';
 import styles from './ProgressDashboard.module.css';
 
 interface ProgressDashboardProps {
@@ -146,10 +147,14 @@ export function ProgressDashboard({
                     ? styles.tierApprentice
                     : styles.tierNovice;
 
+            const displayName =
+              (TRACK_TOPIC_MAP as Record<string, { label: string }>)[topicKey]?.label ||
+              topicKey.replace('_', ' ');
+
             return (
               <div key={topicKey} className={styles.masteryCard}>
                 <div className={styles.masteryHeader}>
-                  <span className={styles.topicName}>{topicKey.replace('_', ' ')}</span>
+                  <span className={styles.topicName}>{displayName}</span>
                   <span className={`${styles.tierBadge} ${tierClass}`}>{stat.tier}</span>
                 </div>
 

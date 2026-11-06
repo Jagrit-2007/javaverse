@@ -117,3 +117,13 @@ export type Approach = z.infer<typeof ApproachSchema>;
 export type Solution = z.infer<typeof SolutionSchema>;
 export type PedagogicalAnalysis = z.infer<typeof PedagogicalAnalysisSchema>;
 export const JavaVerseResponseSchema = PedagogicalAnalysisSchema;
+
+export const AnalysisJobDataSchema = z.object({
+  jobId: z.string().uuid(),
+  chatId: z.string().uuid(),
+  userId: z.string().uuid(),
+  messageId: z.string().uuid(),
+  correlationId: z.string().min(1),
+  userPrompt: z.string().optional(),
+});
+export type AnalysisJobData = z.infer<typeof AnalysisJobDataSchema>;

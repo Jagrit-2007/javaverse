@@ -14,11 +14,11 @@ import {
   Lightbulb,
   AlertTriangle,
 } from 'lucide-react';
-import type { CurriculumLessonDetail, QuizResult, ChallengeResult } from '@javaverse/schemas';
+import type { PublicCurriculumLessonDetail, QuizResult, ChallengeResult } from '@javaverse/schemas';
 import styles from './LessonView.module.css';
 
 interface Props {
-  lesson: CurriculumLessonDetail;
+  lesson: PublicCurriculumLessonDetail;
 }
 
 export function LessonView({ lesson }: Props) {

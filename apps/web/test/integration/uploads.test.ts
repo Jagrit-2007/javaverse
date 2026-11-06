@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
+import { execSync } from 'node:child_process';
 import { prisma } from '@javaverse/db';
 import { POST as handleUpload } from '@/app/api/v1/uploads/route';
 import { GET as handleGetContent } from '@/app/api/v1/uploads/[id]/content/route';
@@ -238,5 +241,30 @@ describe('Upload Quarantine & Media Security Integration', () => {
     });
     expect(linkedAtts[0]?.messageId).toBeDefined();
     expect(linkedAtts[1]?.messageId).toBeDefined();
+  });
+
+  it('ensures application upload routes are not ignored by repository .gitignore', () => {
+    const repoRoot = path.resolve(process.cwd(), '../..');
+    const gitignorePath = path.resolve(repoRoot, '.gitignore');
+    const gitignoreContent = fs.readFileSync(gitignorePath, 'utf8');
+
+    const lines = gitignoreContent.split('\n').map((l) => l.trim());
+    expect(lines).not.toContain('uploads/');
+    expect(lines).toContain('/uploads/');
+
+    const routes = [
+      'apps/web/src/app/api/v1/uploads/route.ts',
+      'apps/web/src/app/api/v1/uploads/[id]/route.ts',
+      'apps/web/src/app/api/v1/uploads/[id]/content/route.ts',
+    ];
+
+    for (const route of routes) {
+      try {
+        execSync(`git check-ignore ${route}`, { cwd: repoRoot, stdio: 'pipe' });
+        expect.unreachable(`Expected ${route} to not be ignored by git`);
+      } catch (err: any) {
+        expect(err.status).toBe(1);
+      }
+    }
   });
 });

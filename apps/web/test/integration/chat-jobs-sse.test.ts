@@ -4,6 +4,7 @@ import { createChatInFirstFreeSlot, postUserMessage, cancelChatJob } from '@/lib
 import { handleUserEventStream } from '@/lib/events';
 import { NextRequest } from 'next/server';
 import { processAnalysisJob } from '../../../../apps/worker/src/processors/analysisProcessor';
+import { sweepStalledJobs } from '../../../../apps/worker/src/reaper';
 
 describe('Phase 4: Durable Jobs, Mock Worker & SSE Streaming', () => {
   let userId: string;
@@ -188,6 +189,160 @@ describe('Phase 4: Durable Jobs, Mock Worker & SSE Streaming', () => {
       res1.body?.cancel();
       res2.body?.cancel();
       res3.body?.cancel();
+    });
+  });
+
+  describe('Stalled Job Recovery & Reaper Resilience', () => {
+    it('recovers stalled job with expired lease and re-enqueues valid shared payload', async () => {
+      const submission = await postUserMessage({
+        chatId,
+        userId,
+        content: 'Explain dynamic programming memoization in Java',
+        correlationId: 'test-corr-reaper-1',
+      });
+
+      // Simulate worker crash: job left in RUNNING with expired lease
+      await prisma.durableJob.update({
+        where: { id: submission.job.id },
+        data: {
+          status: 'RUNNING',
+          leaseOwner: 'worker-dead-node',
+          leaseExpiresAt: new Date(Date.now() - 5000), // Expired 5 seconds ago
+          attempts: 1,
+        },
+      });
+
+      // Sweep for stalled jobs
+      const recoveredCount = await sweepStalledJobs();
+      expect(recoveredCount).toBe(1);
+
+      // Verify DB job transitioned to PENDING with cleared lease
+      const recoveredJob = await prisma.durableJob.findUnique({
+        where: { id: submission.job.id },
+      });
+      expect(recoveredJob?.status).toBe('PENDING');
+      expect(recoveredJob?.leaseOwner).toBeNull();
+      expect(recoveredJob?.leaseExpiresAt).toBeNull();
+
+      // Subsequent sweep should be idempotent and find 0 jobs
+      const secondSweep = await sweepStalledJobs();
+      expect(secondSweep).toBe(0);
+
+      // Worker picks up recovered job (payload contains messageId, userPrompt resolved from PostgreSQL)
+      const workerResult = await processAnalysisJob({
+        data: {
+          jobId: submission.job.id,
+          chatId,
+          userId,
+          messageId: submission.assistantMessage.id,
+          correlationId: 'test-corr-reaper-1',
+        },
+      } as any);
+
+      expect(workerResult.status).toBe('completed');
+
+      // Verify analysis completed and assistant message was updated
+      const completedJob = await prisma.durableJob.findUnique({
+        where: { id: submission.job.id },
+      });
+      expect(completedJob?.status).toBe('COMPLETED');
+
+      const updatedMsg = await prisma.message.findUnique({
+        where: { id: submission.assistantMessage.id },
+      });
+      expect(updatedMsg?.status).toBe('SENT');
+      expect(updatedMsg?.content).toContain('Verified ✅');
+    });
+
+    it('gracefully handles missing message without crashing worker', async () => {
+      const submission = await postUserMessage({
+        chatId,
+        userId,
+        content: 'Task with message to delete',
+        correlationId: 'test-corr-missing-msg',
+      });
+
+      // Delete the assistant message from DB
+      await prisma.message.delete({
+        where: { id: submission.assistantMessage.id },
+      });
+
+      // Worker attempts to process
+      const workerResult = await processAnalysisJob({
+        data: {
+          jobId: submission.job.id,
+          chatId,
+          userId,
+          messageId: submission.assistantMessage.id,
+          correlationId: 'test-corr-missing-msg',
+        },
+      } as any);
+
+      expect(workerResult.status).toBe('missing_message');
+
+      const failedJob = await prisma.durableJob.findUnique({
+        where: { id: submission.job.id },
+      });
+      expect(failedJob?.status).toBe('FAILED');
+    });
+
+    it('rejects malformed payloads predictably rather than crashing the worker', async () => {
+      const invalidPayload = {
+        jobId: 'not-a-valid-uuid',
+        chatId,
+        userId,
+        messageId: 'invalid-id',
+        correlationId: 'corr-malformed',
+      };
+
+      const workerResult = await processAnalysisJob({
+        data: invalidPayload,
+      } as any);
+
+      expect(workerResult.status).toBe('malformed_payload');
+    });
+
+    it('transitions job to FAILED and creates stream event when maxAttempts is exceeded', async () => {
+      const submission = await postUserMessage({
+        chatId,
+        userId,
+        content: 'Task that repeatedly crashes',
+        correlationId: 'test-corr-max-attempts',
+      });
+
+      // Simulate job exceeding maxAttempts (attempts = 3, maxAttempts = 3)
+      await prisma.durableJob.update({
+        where: { id: submission.job.id },
+        data: {
+          status: 'RUNNING',
+          leaseOwner: 'worker-dead-node',
+          leaseExpiresAt: new Date(Date.now() - 5000),
+          attempts: 3,
+          maxAttempts: 3,
+        },
+      });
+
+      // Sweep should terminally fail the job
+      const recoveredCount = await sweepStalledJobs();
+      expect(recoveredCount).toBe(1);
+
+      const failedJob = await prisma.durableJob.findUnique({
+        where: { id: submission.job.id },
+      });
+      expect(failedJob?.status).toBe('FAILED');
+      expect(failedJob?.finishedAt).toBeDefined();
+
+      // Assistant message must be marked FAILED
+      const failedMsg = await prisma.message.findUnique({
+        where: { id: submission.assistantMessage.id },
+      });
+      expect(failedMsg?.status).toBe('FAILED');
+
+      // Failure stream event must be recorded
+      const failureEvent = await prisma.userStreamEvent.findFirst({
+        where: { jobId: submission.job.id, eventType: 'job_failed' },
+      });
+      expect(failureEvent).toBeDefined();
     });
   });
 });
