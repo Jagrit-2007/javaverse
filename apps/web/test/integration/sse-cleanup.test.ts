@@ -107,4 +107,3 @@ describe('SSE Connection Lifecycle & Immediate Disconnect Cleanup (MEDIUM 3)', (
     expect(Number(count)).toBe(0);
   });
 });
-
