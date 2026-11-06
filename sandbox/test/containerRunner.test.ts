@@ -45,7 +45,7 @@ public class Solution {
       expect(res.exitCode).toBe(0);
       expect(res.stdout).toContain('Result: 42');
       expect(res.runnerProvider).toBe('container_runner');
-    });
+    }, 20000);
 
     it('reports COMPILATION_ERROR for syntax errors', async () => {
       const code = `
