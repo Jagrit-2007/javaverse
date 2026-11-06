@@ -1,20 +1,20 @@
-import { Worker } from 'bullmq';
-import { createLogger, runWithCorrelationContext } from '@javaverse/observability';
+import { Job, Worker } from 'bullmq';
+import { createLogger } from '@javaverse/observability';
 import { queueConnection } from './queues';
+import { processAnalysisJob, type AnalysisJobData } from './processors/analysisProcessor';
+import { processMediaScanJob, type MediaScanJobData } from './processors/mediaProcessor';
+import { startReaper, stopReaper } from './reaper';
 
 const logger = createLogger({ service: 'worker' });
 
 logger.info('Initializing JavaVerse background worker...');
 
-const worker = new Worker(
+startReaper(30000);
+
+const analysisWorker = new Worker(
   'analysis-queue',
-  async (job) => {
-    const correlationId = (job.data as { correlationId?: string })?.correlationId;
-    return runWithCorrelationContext({ correlationId }, async () => {
-      logger.info({ jobId: job.id, queue: job.queueName }, 'Processing job');
-      // Phase 1 foundation stub: no real AI or sandbox execution
-      return { status: 'processed_in_phase_1_stub' };
-    });
+  async (job: Job<AnalysisJobData>) => {
+    return processAnalysisJob(job);
   },
   {
     connection: queueConnection,
@@ -22,18 +22,39 @@ const worker = new Worker(
   },
 );
 
-worker.on('completed', (job) => {
-  logger.info({ jobId: job.id }, 'Job completed successfully');
+const mediaWorker = new Worker(
+  'media-queue',
+  async (job: Job<MediaScanJobData>) => {
+    return processMediaScanJob(job);
+  },
+  {
+    connection: queueConnection,
+    concurrency: 5,
+  },
+);
+
+analysisWorker.on('completed', (job) => {
+  logger.info({ jobId: job.id }, 'Analysis job completed successfully');
 });
 
-worker.on('failed', (job, err) => {
-  logger.error({ jobId: job?.id, err }, 'Job processing failed');
+analysisWorker.on('failed', (job, err) => {
+  logger.error({ jobId: job?.id, err }, 'Analysis job processing failed');
+});
+
+mediaWorker.on('completed', (job) => {
+  logger.info({ jobId: job.id }, 'Media scan job completed successfully');
+});
+
+mediaWorker.on('failed', (job, err) => {
+  logger.error({ jobId: job?.id, err }, 'Media scan job processing failed');
 });
 
 async function shutdown(signal: string) {
   logger.info({ signal }, 'Shutting down background worker gracefully...');
   try {
-    await worker.close();
+    stopReaper();
+    await analysisWorker.close();
+    await mediaWorker.close();
     await queueConnection.quit();
     logger.info('Background worker shutdown complete.');
     process.exit(0);

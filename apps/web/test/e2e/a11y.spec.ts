@@ -19,13 +19,16 @@ const ALL_ROUTES = [
   '/auth/suspended',
   '/dashboard',
   '/dashboard/learn',
+  '/dashboard/learn/primitive-types',
   '/dashboard/practice',
+  '/dashboard/practice/two-sum-array',
   '/dashboard/ask',
   '/dashboard/library',
   '/dashboard/progress',
   '/dashboard/notes',
   '/dashboard/settings',
   '/dashboard/settings/security',
+  '/dashboard/admin',
 ];
 
 test.describe('Automated Accessibility Scans (@axe-core/playwright)', () => {

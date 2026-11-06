@@ -71,12 +71,20 @@ export const EnvSchema = z
     ALLOW_LOCAL_SERVICES_IN_PRODUCTION: z.string().optional(),
   })
   .superRefine((data, ctx) => {
-    // Phase 1 execution policy strictly requires mock providers
-    if (data.AI_PROVIDER_PRIMARY !== 'mock') {
+    // AI Provider credential validation
+    if (data.AI_PROVIDER_PRIMARY === 'anthropic' && !data.ANTHROPIC_API_KEY) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['AI_PROVIDER_PRIMARY'],
-        message: 'Phase 1 runtime policy strictly requires AI_PROVIDER_PRIMARY=mock',
+        path: ['ANTHROPIC_API_KEY'],
+        message: 'ANTHROPIC_API_KEY is required when AI_PROVIDER_PRIMARY=anthropic',
+      });
+    }
+
+    if (data.AI_PROVIDER_PRIMARY === 'gemini' && !data.GEMINI_API_KEY) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['GEMINI_API_KEY'],
+        message: 'GEMINI_API_KEY is required when AI_PROVIDER_PRIMARY=gemini',
       });
     }
 

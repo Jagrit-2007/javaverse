@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { buildDynamicNonceCsp, buildStaticCsp } from '@javaverse/security/csp';
+import { buildDynamicNonceCsp, buildStaticCsp, generateCspNonce } from '@javaverse/security/csp';
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -38,7 +38,7 @@ export function middleware(request: NextRequest) {
   let cspHeaderValue: string;
   if (isDashboardRoute) {
     // Dynamic cryptographic nonce for authenticated dashboard shell
-    const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
+    const nonce = generateCspNonce();
     cspHeaderValue = buildDynamicNonceCsp(nonce, isDev);
     requestHeaders.set('x-nonce', nonce);
   } else {

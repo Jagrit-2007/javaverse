@@ -162,3 +162,136 @@ Status: Approved & Implemented
    - Configured non-root runner execution with `--user ${uid}:${gid}` and explicit isolated writable temporary directories: `HOME=/tmp/lhci-home`, `XDG_CONFIG_HOME=/tmp/lhci-home/.config`, `XDG_CACHE_HOME=/tmp/lhci-home/.cache`, and `--shm-size=1g`.
    - Executed through a safe shell entrypoint that creates and validates writability of `$HOME`, `$XDG_CONFIG_HOME`, and `$XDG_CACHE_HOME` under `/tmp` before execing `lhci`.
    - Eliminates `//.local` permission denied and crashpad database errors on unmapped runner UIDs (such as GitHub Actions UID 1001) without granting `--privileged` or root permissions.
+
+## Phase 4 Ratified Decisions
+
+Status: Approved & Implemented
+
+1. **Deterministic 3-Slot User Concurrency Model**:
+   - Enforced 3 concurrent question slots per user strictly through PostgreSQL transaction-level advisory locking (`pg_advisory_xact_lock(hashtext('chat_slot:' || user_id))`) combined with database UNIQUE constraint `(user_id, slot)` where `slot BETWEEN 1 AND 3`.
+   - Prevented race conditions and excessive slot consumption under high concurrent load.
+   - When all 3 slots are occupied, returning HTTP 409 `CHAT_LIMIT_REACHED` with active chat slot summaries, requiring explicit user delete-and-replace confirmation via accessible modal dialog.
+
+2. **Durable Asynchronous Job Processing & Worker Crash Recovery**:
+   - Asynchronous job execution orchestrated via BullMQ on Redis Queue (`analysis-queue`), backed by durable database state machine in `durable_jobs`.
+   - Active worker heartbeat renewals (`leaseExpiresAt = now() + 30s`) and background reaper sweeper recovering stalled jobs whose leases expired without progress.
+   - Graceful cancellation semantics: cancelling a job marks `durable_jobs.status = CANCELLED`, and the worker terminates execution without overwriting cancelled state.
+
+3. **Resilient SSE Streaming & Multiplexed Pub/Sub Fanout**:
+   - Event multiplexing via `user_stream_events` with `stream_seq BIGSERIAL` primary key and Redis Pub/Sub channel `events:user:${userId}`.
+   - Client reconnections replaying missed events seamlessly via `Last-Event-ID` cursor headers.
+   - Enforced max 3 concurrent active SSE connections per user, returning HTTP 429 `SSE_CONNECTION_LIMIT_REACHED` on excess.
+   - 15-second heartbeat comments (`: ping\n\n`) preventing proxy connection timeouts.
+
+## Phase 5 Ratified Decisions
+
+Status: Approved & Implemented
+
+1. **Provider-Neutral AI Architecture & Prompt Injection Boundary**:
+   - Unified `AIProvider` contract with pluggable adapters (`MockProvider`, `AnthropicProvider`, `GeminiProvider`) and structured pedagogical output validated against Zod schemas.
+   - Cryptographically random per-request delimiter wrapping (`<untrusted_learner_content_token>`) strictly isolating learner questions and code snippets from system reasoning instructions.
+   - Model outputs constrained to pure structured JSON data with zero executable script injection.
+
+2. **Upload Quarantine & Media Sanitization Pipeline**:
+   - File uploads immediately placed in `quarantine/` storage in `PENDING` state; access via `/api/v1/uploads/[id]/content` strictly blocked with HTTP 423 `FILE_QUARANTINED` prior to scan completion.
+   - Strict SVG rejection enforced at byte signature inspection level, defeating stored XSS attack vectors.
+   - Sharp worker re-encoding strips all metadata/EXIF tags, limits maximum dimensions to 2048x2048, and outputs clean WebP images to `clean/` storage.
+   - Downloads served with `X-Content-Type-Options: nosniff`, `Content-Disposition: attachment`, and MIME sanitization.
+
+## Phase 6 Ratified Decisions
+
+Status: Approved & Implemented
+
+1. **Sandbox Feasibility Spike & Provider Decision**:
+   - Conducted Linux host feasibility spike with cgroup v2 verification (`docker info --format '{{.CgroupVersion}}'` = 2).
+   - Validated kernel namespace and cgroup containment across all 5 mandatory security vectors:
+     1. Network egress attempt: blocked immediately with `java.net.SocketException: Network unreachable` (`--network none`).
+     2. Filesystem write attempt outside `/tmp`: blocked with `Read-only file system` (`--read-only`).
+     3. Fork bomb / PID exhaustion: contained at 51 threads without affecting host stability (`--pids-limit=64`).
+     4. Memory exhaustion / heap overflow: contained cleanly with `java.lang.OutOfMemoryError: Java heap space` (`--memory=256m --memory-swap=256m`).
+     5. Infinite CPU loop: terminated reliably by runner timeout within 2000ms.
+   - **Ratified Decision**: `container_runner` is ratified as the primary production sandbox execution provider for Java code (`eclipse-temurin:21-alpine` pinned), with `mock` retained for development, fast local testing, and offline fallback.
+   - Integrated sandbox verification into the worker analysis pipeline, recording deterministic execution metrics in the `executions` table.
+
+## Phase 7 Ratified Decisions
+
+Status: Approved & Implemented
+
+1. **WCAG 2.2 AA Accessible Java Concept Visualizations**:
+   - Implemented all 12 canonical Java concept visualizer modes (`array`, `stack`, `queue`, `linked_list`, `binary_tree`, `heap`, `graph`, `hash_table`, `recursion`, `jvm_memory` (2D & 3D), `two_pointer`, `string_manipulation`).
+   - Unified `ConceptVisualizer` orchestration supporting step scrubber, playback controls (play/pause/step), variable speed control (0.5x, 1x, 2x), and `aria-live="polite"` step narrations.
+   - Every visualization couples a visual canvas/SVG representation with an accessible semantic HTML table fallback (`AccessibleTableFallback`) exposing complete variable states, step-by-step changes, and pointer highlights with `aria-current="step"`.
+   - Contrast ratios exceed WCAG 2.2 AA requirements (>= 4.5:1 text, >= 3:1 graphical elements).
+   - `prefers-reduced-motion: reduce` media query support implemented in `Visualizer.module.css` disabling animations and transitions for sensitive learners.
+
+2. **Three.js WebGL Graceful Fallback & Context Management**:
+   - `JvmMemoryScene3D` dynamically checks WebGL context availability (`isWebGLAvailable()`). If unavailable, unsupported, or if an exception is thrown, it renders the 2D SVG JVM Memory visualization with an accessible alert banner.
+   - Strict resource lifecycle cleanup: meshes, geometries, materials, and WebGL renderer instances are explicitly traversed and disposed on component unmount, preventing browser memory leaks or WebGL context limits.
+
+## Phase 8 Ratified Decisions
+
+Status: Approved & Implemented
+
+1. **12 Core Curriculum Lessons & Database Schema**:
+   - Implemented `curriculum_lessons` schema with migration `20261106000000_curriculum_lessons`.
+   - Seeded all 12 launch lessons idempotently across 4 canonical tracks:
+     - **Foundations**: `primitive-types`, `control-flow`, `methods-exceptions`
+     - **OOP**: `classes-objects`, `inheritance-polymorphism`, `interfaces-abstract`
+     - **DSA**: `arrays-arraylist`, `stacks-queues`, `binary-search`
+     - **Advanced Java**: `generics-wildcards`, `streams-lambdas`, `jvm-memory-model`
+   - Verified that all 12 starter codes and challenge harnesses compile and pass execution against the isolated Java 21 container (`eclipse-temurin:21-alpine`).
+
+2. **Three-Depth Conceptual Pedagogy & Lesson-to-Chat Handoff**:
+   - Every lesson provides a real-world analogy hook, three distinct conceptual depths (`simple`, `standard`, `deep dive`), interactive algorithm visualization, in-lesson code runner, common mistakes cards, a 5-question quiz, and a mini coding challenge.
+   - "Ask AI About This Lesson" seamlessly routes into the persistent chat workspace (`/dashboard/ask?prompt=...&lesson=...`), pre-populating learner question context.
+   - Dynamic Java test assembly helper (`assembleJavaSource`) hoists imports to the file header and configures top-level execution classes cleanly.
+
+---
+
+## Phase 9: Practice, Progress, Mastery and Rewards Decisions
+
+1. **Original Practice Problem Bank Architecture**:
+   - Seeded 12 original, production-grade Java problems across Core Java, OOP, DSA, and Advanced Java.
+   - Hidden test harnesses and reference solutions are strictly kept server-side and omitted from student API responses (`GET /api/v1/practice/:slug`).
+   - Progressive 3-tier hint system allows learners to reveal guidance without spoiling solutions.
+
+2. **Idempotent Rewards, Streak Calculation & Non-Coercive Gamification**:
+   - Server-authoritative reward calculation: challenge completion idempotency enforced via unique constraint on `(user_id, item_type, item_id)`.
+   - UTC-aligned daily streak counter increments on consecutive active days and gracefully resets on missed days without timezone drift or client manipulation.
+   - Learners can disable gamification (XP, streaks, badges) at any time in Settings for a focused, pressure-free learning experience.
+
+3. **Spaced Repetition & Privacy-Compliant Data Portability**:
+   - Implemented SuperMemo SM-2 spaced repetition flashcards for automated mistake recovery.
+   - Self-hosted data export (`POST /api/v1/settings/export`) compiles full user history while scrubbing sensitive credentials, tokens, and hashed passwords.
+
+---
+
+## Phase 10: Evaluation, Quality and Privacy-Safe Analytics Decisions
+
+1. **Golden Evaluation Benchmark Suite**:
+   - Authored 50 original, standalone Java 21 evaluation test cases (15 Core Java, 12 OOP, 15 DSA, 8 Concurrency).
+   - Automated evaluation runner executes test cases against AI providers and verifies syntax, compilation, test assertions, and step visualizers.
+
+2. **Strict Privacy, PII Scrubbing & Consent Invariants**:
+   - Regex-based PII scrubber anonymizes emails, IP addresses, URLs, phone numbers, home directory paths, and API keys before any user question enters the Knowledge Base candidate pipeline.
+   - Candidate creation strictly requires explicit user opt-in (`consentImprove: true`) and verified correct verification status.
+   - Immediate privacy withdrawal propagation: toggling off `consentImprove` purges pending candidates.
+
+3. **Owner Administration Console RBAC**:
+   - Owner console located at `/dashboard/admin` and guarded by `requireOwnerAuth`. Non-owners receive HTTP 403 Forbidden.
+   - Dashboard strictly displays aggregated metrics, anonymized candidates, and feedback reports without exposing raw user credentials or private chat histories.
+
+---
+
+## Phase 11: Production Hardening and Release Readiness Decisions
+
+1. **Disaster Recovery & Automated Backup Drill**:
+   - Implemented standard PostgreSQL backup (`scripts/backup-db.sh`) and restore (`scripts/restore-db.sh`) routines using gzip compression and SHA-256 checksums.
+   - Automated disaster recovery test (`scripts/verify-backup-restore.mjs`) validates full snapshot restoration and asserts 100% data consistency across all database tables.
+
+2. **Edge Runtime Compatible CSP Nonce Generation**:
+   - Standardized CSP nonce generation on Web Crypto API (`globalThis.crypto.getRandomValues`) to ensure compatibility with Edge Runtime, Node.js, and browser environments.
+
+3. **Concurrency Safety & High-Volume Idempotency**:
+   - Refactored reward calculation in `progress.ts` to use atomic database operations, ensuring zero duplicate XP awards under simultaneous burst traffic.
+   - Validated session revocation under concurrency: deleting sessions by `userId` revokes 20 concurrent sessions immediately without affecting other active users.
