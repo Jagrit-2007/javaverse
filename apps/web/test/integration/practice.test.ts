@@ -29,7 +29,6 @@ describe('Phase 9: Practice, Progress, Mastery and Rewards Integration', () => {
       create: {
         email: 'phase9_learner@javaverse.local',
         displayName: 'Phase 9 Learner',
-        role: 'MEMBER',
       },
     });
     testUserId = user.id;
@@ -267,7 +266,6 @@ describe('Phase 9: Practice, Progress, Mastery and Rewards Integration', () => {
         create: {
           email: 'topic_mastery_learner@javaverse.local',
           displayName: 'Topic Mastery Learner',
-          role: 'MEMBER',
         },
       });
       cleanLearnerId = u.id;

@@ -2,7 +2,7 @@ import React from 'react';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { cookies } from 'next/headers';
-import { resolveSession, SESSION_COOKIE_NAME } from '@/lib/auth';
+import { resolveSession, getSessionTokenFromCookies } from '@/lib/auth';
 import { createCsrfToken } from '@/lib/csrf';
 import { getPracticeProblemBySlug } from '@/lib/practice';
 import { PracticeWorkspace } from './PracticeWorkspace';
@@ -30,7 +30,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function PracticeProblemPage({ params }: Props) {
   const { slug } = await params;
   const cookieStore = await cookies();
-  const sessionToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  const sessionToken = getSessionTokenFromCookies(cookieStore);
 
   let userId: string | undefined;
   let csrfToken = '';

@@ -8,11 +8,10 @@ generator client {
 }
 
 model DeploymentLimits {
-  id               Int      @id @default(1)
-  maxUsers         Int      @default(5) @map("max_users")
-  registrationMode String   @default("invite_only") @map("registration_mode")
-  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  id        Int      @id @default(1)
+  maxUsers  Int      @default(5) @map("max_users")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   @@map("deployment_limits")
 }
@@ -21,7 +20,6 @@ model User {
   id              String    @id @default(uuid()) @db.Uuid
   email           String    @unique
   passwordHash    String?   @map("password_hash")
-  role            String    @default("MEMBER")
   status          String    @default("ACTIVE")
   emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamptz
   consentImprove     Boolean   @default(false) @map("consent_improve")
@@ -31,7 +29,6 @@ model User {
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  invitationsCreated  Invitation[]         @relation("UserInvitations")
   emailTokens         EmailToken[]
   sessions            Session[]
   mfaTotp             MfaTotp?
@@ -57,23 +54,6 @@ model User {
 
   @@index([status])
   @@map("users")
-}
-
-model Invitation {
-  id              String   @id @default(uuid()) @db.Uuid
-  emailNormalized String   @map("email_normalized")
-  tokenHash       String   @unique @map("token_hash")
-  role            String   @default("MEMBER")
-  status          String   @default("PENDING")
-  invitedByUserId String?  @map("invited_by_user_id") @db.Uuid
-  expiresAt       DateTime @map("expires_at") @db.Timestamptz
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-
-  invitedByUser User? @relation("UserInvitations", fields: [invitedByUserId], references: [id], onDelete: SetNull)
-
-  @@index([expiresAt])
-  @@map("invitations")
 }
 
 model EmailToken {
@@ -341,7 +321,6 @@ model AuditLog {
   targetUserId    String?  @map("target_user_id") @db.Uuid
   actorPseudonym  String   @map("actor_pseudonym")
   actorType       String   @map("actor_type")
-  actorRoleAtTime String?  @map("actor_role_at_time")
   action          String
   targetMetadata  Json     @default("{}") @map("target_metadata")
   ipAddress       String?  @map("ip_address")

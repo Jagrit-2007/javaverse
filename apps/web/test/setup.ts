@@ -1,8 +1,21 @@
+import { assertSafeTestDatabase } from '@javaverse/db';
+
 // Test environment variables
 (process.env as Record<string, string | undefined>).NODE_ENV = 'test';
-process.env.DATABASE_URL =
-  process.env.DATABASE_URL ||
-  'postgresql://javaverse:javaverse@127.0.0.1:5432/javaverse?schema=public';
+
+// Enforce javaverse_test as the default test database
+const safeTestDbUrl =
+  'postgresql://javaverse:javaverse@127.0.0.1:5432/javaverse_test?schema=public';
+if (
+  !process.env.DATABASE_URL ||
+  process.env.DATABASE_URL.endsWith('/javaverse?schema=public') ||
+  process.env.DATABASE_URL.endsWith('/javaverse')
+) {
+  process.env.DATABASE_URL = safeTestDbUrl;
+}
+
+// Strict safety guard: throws immediately if attempting to run against javaverse or forbidden DBs
+assertSafeTestDatabase(process.env.DATABASE_URL);
 process.env.REDIS_QUEUE_URL = process.env.REDIS_QUEUE_URL || 'redis://127.0.0.1:6379';
 process.env.REDIS_CACHE_URL = process.env.REDIS_CACHE_URL || 'redis://127.0.0.1:6380';
 process.env.SESSION_SECRET =

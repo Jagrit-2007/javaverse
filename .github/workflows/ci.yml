@@ -12,6 +12,7 @@ jobs:
     env:
       CI: 'true'
       DATABASE_URL: 'postgresql://javaverse:javaverse@127.0.0.1:5432/javaverse?schema=public'
+      DATABASE_URL_TEST: 'postgresql://javaverse:javaverse@127.0.0.1:5432/javaverse_test?schema=public'
       REDIS_QUEUE_URL: 'redis://127.0.0.1:6379'
       REDIS_CACHE_URL: 'redis://127.0.0.1:6380'
       SESSION_SECRET: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef' # gitleaks:allow
@@ -87,14 +88,23 @@ jobs:
           docker compose -f infra/docker-compose.yml logs
           exit 1
 
-      - name: Apply database migrations
-        run: pnpm --filter @javaverse/db migrate:deploy
+      - name: Apply database migrations to development and test databases
+        run: |
+          pnpm --filter @javaverse/db migrate:deploy
+          docker exec javaverse-postgres psql -U javaverse -d postgres -c "CREATE DATABASE javaverse_test;" || true
+          docker exec javaverse-postgres psql -U javaverse -d javaverse_test -c "CREATE EXTENSION IF NOT EXISTS citext; CREATE EXTENSION IF NOT EXISTS vector;"
+          DATABASE_URL='postgresql://javaverse:javaverse@127.0.0.1:5432/javaverse_test?schema=public' pnpm --filter @javaverse/db migrate:deploy
 
-      - name: Seed deterministic test limits
-        run: pnpm --filter @javaverse/db seed
+      - name: Seed deterministic limits
+        run: |
+          pnpm --filter @javaverse/db seed
+          DATABASE_URL='postgresql://javaverse:javaverse@127.0.0.1:5432/javaverse_test?schema=public' pnpm --filter @javaverse/db seed
 
       - name: Run unit and integration tests
         run: pnpm test
+        env:
+          DATABASE_URL: 'postgresql://javaverse:javaverse@127.0.0.1:5432/javaverse_test?schema=public'
+          NODE_ENV: 'test'
 
       - name: Build production application
         run: pnpm build

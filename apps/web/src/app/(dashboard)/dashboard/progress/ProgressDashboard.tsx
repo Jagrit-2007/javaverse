@@ -251,8 +251,8 @@ export function ProgressDashboard({
                   padding: '0.5rem 1rem',
                   fontSize: '0.875rem',
                   fontWeight: 600,
-                  backgroundColor: '#2563eb',
-                  color: '#ffffff',
+                  backgroundColor: 'var(--action-primary-bg)',
+                  color: 'var(--action-primary-text)',
                   border: 'none',
                   borderRadius: '0.375rem',
                   cursor: 'pointer',
@@ -318,11 +318,11 @@ export function ProgressDashboard({
           <div
             style={{
               padding: '1.5rem',
-              backgroundColor: '#ffffff',
+              backgroundColor: 'var(--bg-surface)',
               borderRadius: '0.5rem',
-              border: '1px solid #e2e8f0',
+              border: '1px solid var(--border-subtle)',
               textAlign: 'center',
-              color: '#475569',
+              color: 'var(--text-secondary)',
             }}
           >
             🎉 All caught up on flashcard reviews! Mistake explanations from quizzes and code runs

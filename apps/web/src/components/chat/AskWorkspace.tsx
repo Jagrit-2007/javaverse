@@ -7,6 +7,7 @@ import { ChatLimitDialog } from './ChatLimitDialog';
 import { ChatConversation, type ChatMessage } from './ChatConversation';
 import { WorkspacePanel } from './WorkspacePanel';
 import { VisuallyHidden } from '@/components/ui/VisuallyHidden';
+import { Button } from '@/components/ui/Button';
 import styles from './AskWorkspace.module.css';
 
 export function AskWorkspace() {
@@ -28,7 +29,37 @@ export function AskWorkspace() {
   const [notes, setNotes] = useState<string>('');
   const [isLimitDialogOpen, setIsLimitDialogOpen] = useState(false);
 
+  // AI Provider info & Consent state
+  const [aiProviderInfo, setAiProviderInfo] = useState<{
+    activeProvider: string;
+    activeModel: string;
+    externalAiEnabled: boolean;
+  }>({
+    activeProvider: 'mock',
+    activeModel: 'mock-analyzer-v1',
+    externalAiEnabled: false,
+  });
+  const [showConsentModal, setShowConsentModal] = useState(false);
+  const [consentRemember, setConsentRemember] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const pendingContentRef = useRef<string | null>(null);
+
   const searchParams = useSearchParams();
+
+  useEffect(() => {
+    fetch('/api/v1/ai/providers')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.data) {
+          setAiProviderInfo({
+            activeProvider: data.data.activeProvider || 'mock',
+            activeModel: data.data.activeModel || 'mock-analyzer-v1',
+            externalAiEnabled: Boolean(data.data.externalAiEnabled),
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const initialPrompt = searchParams.get('prompt');
@@ -52,6 +83,22 @@ export function AskWorkspace() {
     } catch {
       // Ignored
     }
+  }, []);
+
+  const ensureCsrfToken = useCallback(async (): Promise<string> => {
+    if (csrfTokenRef.current) return csrfTokenRef.current;
+    try {
+      const res = await fetch('/api/v1/auth/csrf');
+      if (res.ok) {
+        const data = await res.json();
+        const token = data.data?.csrfToken || '';
+        csrfTokenRef.current = token;
+        return token;
+      }
+    } catch {
+      // Ignored
+    }
+    return '';
   }, []);
 
   // 2. Fetch all user chats
@@ -251,11 +298,12 @@ export function AskWorkspace() {
         };
 
         try {
+          const csrfToken = await ensureCsrfToken();
           await fetch(`/api/v1/chats/${activeChatId}/state`, {
             method: 'PUT',
             headers: {
               'Content-Type': 'application/json',
-              'x-csrf-token': csrfTokenRef.current,
+              'x-csrf-token': csrfToken,
             },
             body: JSON.stringify(payload),
           });
@@ -300,11 +348,12 @@ export function AskWorkspace() {
     }
 
     try {
+      const csrfToken = await ensureCsrfToken();
       const res = await fetch('/api/v1/chats', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-csrf-token': csrfTokenRef.current,
+          'x-csrf-token': csrfToken,
         },
         body: JSON.stringify({}),
       });
@@ -325,10 +374,11 @@ export function AskWorkspace() {
   // Delete & Replace
   async function handleDeleteAndReplace(chatIdToDelete: string) {
     try {
+      const csrfToken = await ensureCsrfToken();
       const delRes = await fetch(`/api/v1/chats/${chatIdToDelete}`, {
         method: 'DELETE',
         headers: {
-          'x-csrf-token': csrfTokenRef.current,
+          'x-csrf-token': csrfToken,
         },
       });
 
@@ -338,7 +388,7 @@ export function AskWorkspace() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-csrf-token': csrfTokenRef.current,
+            'x-csrf-token': csrfToken,
           },
           body: JSON.stringify({}),
         });
@@ -355,7 +405,7 @@ export function AskWorkspace() {
   }
 
   // Send Message
-  async function handleSendMessage(content: string) {
+  async function executeSendMessage(content: string) {
     if (!activeChatId) return;
 
     // Optimistically show user message and assistant placeholder
@@ -393,16 +443,18 @@ export function AskWorkspace() {
     });
 
     try {
+      const csrfToken = await ensureCsrfToken();
       const res = await fetch(`/api/v1/chats/${activeChatId}/messages`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-csrf-token': csrfTokenRef.current,
+          'x-csrf-token': csrfToken,
         },
         body: JSON.stringify({ content }),
       });
 
       if (res.ok) {
+        setErrorMessage(null);
         const json = await res.json();
         const jobId = json.data?.jobId;
         setActiveChat((prev) => {
@@ -418,21 +470,62 @@ export function AskWorkspace() {
           };
         });
       } else {
+        const json = await res.json().catch(() => null);
+        const msg = json?.error?.message || 'Failed to send message';
+        setErrorMessage(msg);
         await loadChatDetails(activeChatId);
       }
-    } catch {
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Network error');
       await loadChatDetails(activeChatId);
     }
   }
+
+  async function handleSendMessage(content: string): Promise<boolean> {
+    if (!activeChatId) return false;
+
+    // External AI Consent check (Part 11F)
+    if (aiProviderInfo.activeProvider !== 'mock' && aiProviderInfo.externalAiEnabled) {
+      const consentGiven =
+        typeof window !== 'undefined' && sessionStorage.getItem('external_ai_consent') === 'true';
+      if (!consentGiven) {
+        pendingContentRef.current = content;
+        setShowConsentModal(true);
+        return false;
+      }
+    }
+
+    await executeSendMessage(content);
+    return true;
+  }
+
+  const handleConsentConfirm = async () => {
+    if (consentRemember && typeof window !== 'undefined') {
+      sessionStorage.setItem('external_ai_consent', 'true');
+    }
+    setShowConsentModal(false);
+    const content = pendingContentRef.current;
+    pendingContentRef.current = null;
+    if (content) {
+      setDraftMessage('');
+      await executeSendMessage(content);
+    }
+  };
+
+  const handleConsentCancel = () => {
+    setShowConsentModal(false);
+    pendingContentRef.current = null;
+  };
 
   // Cancel Job
   async function handleCancelJob() {
     if (!activeChatId) return;
     try {
+      const csrfToken = await ensureCsrfToken();
       await fetch(`/api/v1/chats/${activeChatId}/cancel`, {
         method: 'POST',
         headers: {
-          'x-csrf-token': csrfTokenRef.current,
+          'x-csrf-token': csrfToken,
         },
       });
       await loadChatDetails(activeChatId);
@@ -445,10 +538,11 @@ export function AskWorkspace() {
   async function handleRetryJob() {
     if (!activeChatId) return;
     try {
+      const csrfToken = await ensureCsrfToken();
       await fetch(`/api/v1/chats/${activeChatId}/retry`, {
         method: 'POST',
         headers: {
-          'x-csrf-token': csrfTokenRef.current,
+          'x-csrf-token': csrfToken,
         },
       });
       await loadChatDetails(activeChatId);
@@ -461,11 +555,12 @@ export function AskWorkspace() {
   async function handleUpdateTitle(newTitle: string) {
     if (!activeChatId) return;
     try {
+      const csrfToken = await ensureCsrfToken();
       await fetch(`/api/v1/chats/${activeChatId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'x-csrf-token': csrfTokenRef.current,
+          'x-csrf-token': csrfToken,
         },
         body: JSON.stringify({ title: newTitle }),
       });
@@ -491,6 +586,60 @@ export function AskWorkspace() {
         onSelectChat={(id) => setActiveChatId(id)}
         onNewChatClick={handleNewChatClick}
       />
+
+      {/* AI Mode Banner (Part 11E) */}
+      <div
+        role="status"
+        aria-label="AI Provider Mode"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: 'var(--space-2) var(--space-4)',
+          borderRadius: 'var(--radius-md)',
+          fontSize: 'var(--text-xs)',
+          backgroundColor: 'var(--bg-surface-subtle)',
+          border: '1px solid var(--border-subtle)',
+          color: 'var(--text-secondary)',
+          margin: 'var(--space-2) 0',
+        }}
+        data-testid="ai-mode-banner"
+      >
+        {aiProviderInfo.activeProvider === 'gemini' ? (
+          <span>
+            <strong>AI Provider: Gemini</strong> · Model: {aiProviderInfo.activeModel} · Type:
+            External · Requests are sent to an external AI provider and may consume API quota.
+          </span>
+        ) : aiProviderInfo.activeProvider === 'anthropic' ? (
+          <span>
+            <strong>AI Provider: Anthropic</strong> · Model: {aiProviderInfo.activeModel} · Type:
+            External · Requests are sent to an external AI provider and may consume API quota.
+          </span>
+        ) : (
+          <span>
+            <strong>AI Provider: Local Mock</strong> · Model: {aiProviderInfo.activeModel} · Type:
+            Local · No external AI request or paid token usage.
+          </span>
+        )}
+      </div>
+
+      {errorMessage && (
+        <div
+          role="alert"
+          style={{
+            padding: 'var(--space-3) var(--space-4)',
+            borderRadius: 'var(--radius-md)',
+            backgroundColor: 'var(--status-danger-subtle, #fef2f2)',
+            border: '1px solid var(--status-danger, #ef4444)',
+            color: 'var(--status-danger-text, #991b1b)',
+            fontSize: 'var(--text-sm)',
+            margin: 'var(--space-2) 0',
+          }}
+          data-testid="ask-error-banner"
+        >
+          {errorMessage}
+        </div>
+      )}
 
       <div className={styles.splitPane}>
         {activeChat ? (
@@ -557,6 +706,115 @@ export function AskWorkspace() {
         chats={chats.filter((c): c is ChatSlotItem => c !== null)}
         onDeleteAndReplace={handleDeleteAndReplace}
       />
+
+      {/* External AI Consent Modal (Part 11F) */}
+      {showConsentModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="ai-consent-title"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+          data-testid="external-ai-consent-dialog"
+        >
+          <div
+            style={{
+              backgroundColor: 'var(--bg-surface)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-lg)',
+              padding: 'var(--space-6)',
+              maxWidth: '480px',
+              width: '90%',
+              boxShadow: 'var(--shadow-lg)',
+            }}
+          >
+            <h2
+              id="ai-consent-title"
+              style={{
+                fontSize: 'var(--text-lg)',
+                fontWeight: 700,
+                marginBottom: 'var(--space-2)',
+              }}
+            >
+              External AI Service Notice
+            </h2>
+            <p
+              style={{
+                fontSize: 'var(--text-sm)',
+                color: 'var(--text-secondary)',
+                lineHeight: 1.5,
+                marginBottom: 'var(--space-3)',
+              }}
+            >
+              Your question and relevant Java code snippets will be sent to{' '}
+              <strong>
+                {aiProviderInfo.activeProvider === 'gemini' ? 'Google Gemini' : 'Anthropic Claude'}
+              </strong>{' '}
+              for pedagogical analysis.
+            </p>
+            <ul
+              style={{
+                fontSize: 'var(--text-xs)',
+                color: 'var(--text-muted)',
+                marginBottom: 'var(--space-4)',
+                paddingLeft: 'var(--space-4)',
+              }}
+            >
+              <li>External AI terms of service and privacy policies apply.</li>
+              <li>Token usage and potential API costs apply.</li>
+              <li>
+                JavaVerse applies automated redaction and structured prompt boundaries. Automated
+                detection may not identify every sensitive value. Do not submit passwords, API keys,
+                confidential code, or private information.
+              </li>
+            </ul>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--space-2)',
+                marginBottom: 'var(--space-4)',
+              }}
+            >
+              <input
+                type="checkbox"
+                id="consent-remember"
+                checked={consentRemember}
+                onChange={(e) => setConsentRemember(e.target.checked)}
+              />
+              <label
+                htmlFor="consent-remember"
+                style={{
+                  fontSize: 'var(--text-xs)',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                }}
+              >
+                Remember for this browser session
+              </label>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-3)' }}>
+              <Button variant="secondary" size="sm" onClick={handleConsentCancel}>
+                Cancel
+              </Button>
+              <Button variant="primary" size="sm" onClick={handleConsentConfirm}>
+                {aiProviderInfo.activeProvider === 'gemini'
+                  ? 'Continue with Gemini'
+                  : aiProviderInfo.activeProvider === 'anthropic'
+                    ? 'Continue with Anthropic'
+                    : 'Continue'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

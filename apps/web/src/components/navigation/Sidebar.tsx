@@ -12,7 +12,6 @@ import {
   BarChart3,
   FileText,
   Settings,
-  ShieldAlert,
 } from 'lucide-react';
 import { Logo } from '../brand/Logo';
 import styles from './Sidebar.module.css';
@@ -37,7 +36,6 @@ export const SIDEBAR_NAV_ITEMS: NavItem[] = [
 export interface SidebarProps {
   user?: {
     displayName: string;
-    role: string;
   };
 }
 
@@ -45,17 +43,10 @@ export function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname();
 
   const displayName = user?.displayName || 'Learner';
-  const roleDisplay = user?.role
-    ? user.role === 'OWNER'
-      ? 'Workspace Owner'
-      : 'Learner'
-    : 'Workspace Member';
+  const roleDisplay = 'Learner';
   const initial = displayName.charAt(0).toUpperCase();
 
-  const navItems =
-    user?.role === 'OWNER'
-      ? [...SIDEBAR_NAV_ITEMS, { label: 'Admin', href: '/dashboard/admin', icon: ShieldAlert }]
-      : SIDEBAR_NAV_ITEMS;
+  const navItems = SIDEBAR_NAV_ITEMS;
 
   return (
     <aside className={styles.sidebar} aria-label="Desktop Sidebar Navigation">

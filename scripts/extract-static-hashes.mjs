@@ -11,7 +11,7 @@ const appDir = path.resolve(__dirname, '../apps/web/.next/server/app');
 const outputFile = path.resolve(__dirname, '../packages/security/src/static-hashes.ts');
 const envLocalFile = path.resolve(__dirname, '../apps/web/.env.local');
 
-const THEME_SCRIPT_HASH = "'sha256-GV/BZf3I5eY8+JPJIO3tQvn8LgHuYvyWCaEAXQ1cFgg='";
+const THEME_SCRIPT_HASH = "'sha256-uzc/ICGCVhC9uE7iS0jwoALziW9F9jnNPGlor+yZDuk='";
 
 if (!fs.existsSync(appDir)) {
   console.error('App directory does not exist:', appDir);
@@ -82,4 +82,23 @@ if (fs.existsSync(envLocalFile)) {
   }
   fs.writeFileSync(envLocalFile, envContent, 'utf8');
   console.log(`Updated STATIC_SCRIPT_HASHES in ${envLocalFile}`);
+}
+
+// Also synchronize edge runtime middleware bundle so static CSP hashes match immediately in production
+const edgeChunksDir = path.resolve(__dirname, '../apps/web/.next/server/edge/chunks');
+if (fs.existsSync(edgeChunksDir)) {
+  const edgeFiles = fs.readdirSync(edgeChunksDir);
+  for (const file of edgeFiles) {
+    if (file.endsWith('.js')) {
+      const filePath = path.join(edgeChunksDir, file);
+      let content = fs.readFileSync(filePath, 'utf8');
+      const hashArrayRegex = /([a-zA-Z0-9_$]+)=(\[(\"\'sha256-[^\"]*\'\"(?:,\s*)?)+\])/;
+      const match = hashArrayRegex.exec(content);
+      if (match) {
+        content = content.replace(hashArrayRegex, `${match[1]}=${JSON.stringify(sortedHashes)}`);
+        fs.writeFileSync(filePath, content, 'utf8');
+        console.log(`Synchronized static CSP hashes into edge chunk: ${file}`);
+      }
+    }
+  }
 }

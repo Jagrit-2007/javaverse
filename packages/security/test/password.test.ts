@@ -12,13 +12,18 @@ describe('Password Security Primitives', () => {
 
   it('hashes and verifies passwords using Argon2id', async () => {
     const hash = await hashPassword(goodPassword);
-    expect(hash).toContain('$argon2id$');
+    expect(hash.startsWith('$argon2id$')).toBe(true);
+    expect(hash).not.toBe(goodPassword);
+    expect(hash).not.toContain(goodPassword);
 
     const isValid = await verifyPassword(goodPassword, hash);
     expect(isValid).toBe(true);
 
     const isInvalid = await verifyPassword('WrongPassword123!', hash);
     expect(isInvalid).toBe(false);
+
+    const isCaseVariantInvalid = await verifyPassword(goodPassword.toLowerCase(), hash);
+    expect(isCaseVariantInvalid).toBe(false);
   });
 
   it('verifies dummy password constant without errors', async () => {
@@ -37,6 +42,22 @@ describe('Password Security Primitives', () => {
     // Common password from blocklist
     expect(validatePasswordPolicy('password12345').valid).toBe(false);
     expect(validatePasswordPolicy('qwertyuiop12').valid).toBe(false);
+
+    // Whitespace policy: internal spaces allowed, leading/trailing rejected
+    const leadingSpace = validatePasswordPolicy(` ${goodPassword}`);
+    expect(leadingSpace.valid).toBe(false);
+    expect(leadingSpace.reason).toBe('Password cannot begin or end with whitespace.');
+
+    const trailingSpace = validatePasswordPolicy(`${goodPassword} `);
+    expect(trailingSpace.valid).toBe(false);
+    expect(trailingSpace.reason).toBe('Password cannot begin or end with whitespace.');
+
+    const leadingTab = validatePasswordPolicy(`\t${goodPassword}`);
+    expect(leadingTab.valid).toBe(false);
+    expect(leadingTab.reason).toBe('Password cannot begin or end with whitespace.');
+
+    const internalSpacePw = 'Correct Horse Battery Staple 123!';
+    expect(validatePasswordPolicy(internalSpacePw).valid).toBe(true);
 
     // Valid
     expect(validatePasswordPolicy(goodPassword).valid).toBe(true);

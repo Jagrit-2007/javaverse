@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PrismaClient } from '../packages/db/node_modules/@prisma/client/index.js';
+import { assertSafeTestDatabase } from '../packages/db/src/safety.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,6 +12,9 @@ const rootDir = path.resolve(__dirname, '..');
 const PRIMARY_DB_URL = 'postgresql://javaverse:javaverse@127.0.0.1:5432/javaverse?schema=public';
 const TEST_RESTORE_DB = 'javaverse_backup_verify_test';
 const RESTORE_DB_URL = `postgresql://javaverse:javaverse@127.0.0.1:5432/${TEST_RESTORE_DB}?schema=public`;
+
+// Safety guard: Ensure target restore database is strictly an allowlisted test database
+assertSafeTestDatabase(RESTORE_DB_URL, { requireTestEnv: false });
 const BACKUP_TMP_DIR = path.join(rootDir, 'backups', 'verify_tmp');
 
 console.log('=== JavaVerse Backup & Restore Automated Verification ===');

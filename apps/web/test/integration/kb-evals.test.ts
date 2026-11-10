@@ -24,7 +24,6 @@ describe('Phase 10: KB, Feedback, and Evals Integration', () => {
       data: {
         email: `consented-${Date.now()}@test.local`,
         displayName: 'Consented Learner',
-        role: 'MEMBER',
         consentImprove: true,
       },
     });
@@ -33,21 +32,16 @@ describe('Phase 10: KB, Feedback, and Evals Integration', () => {
       data: {
         email: `non-consented-${Date.now()}@test.local`,
         displayName: 'Private Learner',
-        role: 'MEMBER',
         consentImprove: false,
       },
     });
 
-    ownerUser = await prisma.user.findFirst({ where: { role: 'OWNER' } });
-    if (!ownerUser) {
-      ownerUser = await prisma.user.create({
-        data: {
-          email: `owner-${Date.now()}@test.local`,
-          displayName: 'Workspace Owner',
-          role: 'OWNER',
-        },
-      });
-    }
+    ownerUser = await prisma.user.create({
+      data: {
+        email: `reviewer-${Date.now()}@test.local`,
+        displayName: 'Reviewer User',
+      },
+    });
 
     // 2. Create chats and messages
     const chat = await prisma.chat.create({

@@ -2,7 +2,13 @@ import { NextRequest } from 'next/server';
 import { extractSessionCookie, resolveSession } from '@/lib/auth';
 import { validateCsrf } from '@/lib/csrf';
 import { jsonOk, jsonError } from '@/lib/apiResponse';
-import { postUserMessage, ChatNotFoundError } from '@/lib/chats';
+import { postUserMessage, ChatNotFoundError, ActiveJobInProgressError } from '@/lib/chats';
+import {
+  checkAndAcquireAiLimits,
+  releaseAiConcurrencySlot,
+  releaseAiSubmitLock,
+  refundAiDailyQuota,
+} from '@/lib/aiLimits';
 import { prisma } from '@javaverse/db';
 
 interface RouteContext {
@@ -70,6 +76,19 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return jsonError('INVALID_INPUT', 'Message content is required', 400);
   }
 
+  const limitCheck = await checkAndAcquireAiLimits({ userId: auth.user.id });
+  if (!limitCheck.allowed) {
+    const res = jsonError(
+      limitCheck.code || 'RATE_LIMIT_EXCEEDED',
+      limitCheck.message || 'Request limit exceeded.',
+      (limitCheck.status || 429) as 400 | 401 | 403 | 404 | 409 | 422 | 429 | 500 | 503,
+    );
+    if (limitCheck.retryAfterSeconds) {
+      res.headers.set('Retry-After', String(limitCheck.retryAfterSeconds));
+    }
+    return res;
+  }
+
   const correlationId = request.headers.get('x-correlation-id') || crypto.randomUUID();
 
   try {
@@ -90,6 +109,22 @@ export async function POST(request: NextRequest, context: RouteContext) {
       { status: 202 },
     );
   } catch (err) {
+    if (limitCheck.acquiredConcurrency) {
+      await releaseAiConcurrencySlot();
+      await releaseAiSubmitLock(auth.user.id);
+      await refundAiDailyQuota(auth.user.id);
+    }
+    if (
+      err instanceof ActiveJobInProgressError ||
+      (typeof err === 'object' &&
+        err !== null &&
+        'code' in err &&
+        (err as { code: string }).code === 'ACTIVE_JOB_IN_PROGRESS')
+    ) {
+      const message =
+        err instanceof Error ? err.message : 'A question analysis is already in progress.';
+      return jsonError('ACTIVE_JOB_IN_PROGRESS', message, 409);
+    }
     if (
       err instanceof ChatNotFoundError ||
       (typeof err === 'object' &&

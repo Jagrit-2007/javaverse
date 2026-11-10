@@ -18,18 +18,14 @@ async function main() {
     where: { id: 1 },
     update: {
       maxUsers: 5,
-      registrationMode: 'invite_only',
     },
     create: {
       id: 1,
       maxUsers: 5,
-      registrationMode: 'invite_only',
     },
   });
 
-  console.log(
-    `Seeded deployment_limits singleton: max_users=${limits.maxUsers}, registration_mode=${limits.registrationMode}`,
-  );
+  console.log(`Seeded deployment_limits singleton: max_users=${limits.maxUsers}`);
 }
 
 main()

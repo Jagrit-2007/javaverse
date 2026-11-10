@@ -6,20 +6,13 @@ export const ALLOWED_AUDIT_METADATA_KEYS = new Set([
   'status_code',
   'reason',
   'key_version',
-  'target_role',
   'breach_check',
   'delivery_channel',
   'count',
   'revoked_session_public_id',
-  'previous_invitation_id',
-  'new_invitation_id',
 ]);
 
-const UUID_METADATA_KEYS = new Set([
-  'revoked_session_public_id',
-  'previous_invitation_id',
-  'new_invitation_id',
-]);
+const UUID_METADATA_KEYS = new Set(['revoked_session_public_id']);
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 

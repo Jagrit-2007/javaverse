@@ -50,7 +50,7 @@ describe('CSRF Protection & Rate Limiting (including Redis Outage)', () => {
 
     it('rejects flow token used for a different flow context', () => {
       const loginToken = createCsrfToken({ flow: 'login' });
-      const req = new NextRequest('http://localhost:3000/api/v1/auth/bootstrap/finalize', {
+      const req = new NextRequest('http://localhost:3000/api/v1/auth/signup', {
         method: 'POST',
         headers: {
           origin: 'http://localhost:3000',
@@ -58,7 +58,7 @@ describe('CSRF Protection & Rate Limiting (including Redis Outage)', () => {
         },
       });
 
-      const result = validateCsrf(req, { flow: 'bootstrap' });
+      const result = validateCsrf(req, { flow: 'signup' });
       expect(result.valid).toBe(false);
     });
   });

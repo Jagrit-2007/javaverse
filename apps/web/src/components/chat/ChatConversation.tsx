@@ -14,7 +14,7 @@ export interface ChatMessage {
   content: string;
   status: string;
   createdAt: string;
-  analysis?: { result?: AnalysisDetails } | null;
+  analysis?: { result?: AnalysisDetails; modelId?: string } | null;
 }
 
 interface ChatConversationProps {
@@ -23,7 +23,7 @@ interface ChatConversationProps {
   slot: number;
   messages: ChatMessage[];
   activeJob: { id: string; status: string; stage?: string | null; progress?: number } | null;
-  onSendMessage: (content: string) => Promise<void>;
+  onSendMessage: (content: string) => Promise<boolean | void>;
   onCancelJob: () => Promise<void>;
   onRetryJob: () => Promise<void>;
   onUpdateTitle: (title: string) => Promise<void>;
@@ -36,7 +36,7 @@ const STAGES = [
   { id: 'understanding', label: '2. Understanding' },
   { id: 'choosing_technique', label: '3. Choosing Technique' },
   { id: 'writing_solution', label: '4. Writing Solution' },
-  { id: 'testing_sandbox', label: '5. Testing in Sandbox' },
+  { id: 'testing_sandbox', label: '5. Testing Code' },
   { id: 'building_visuals', label: '6. Building Visuals' },
 ];
 
@@ -54,6 +54,7 @@ export function ChatConversation({
 }: ChatConversationProps) {
   const [currentTitle, setCurrentTitle] = useState(title);
   const [isSending, setIsSending] = useState(false);
+  const isSubmittingRef = useRef(false);
   const messageEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -69,14 +70,18 @@ export function ChatConversation({
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
-    if (!draftMessage.trim() || isSending || isWorking) return;
+    if (!draftMessage.trim() || isSending || isWorking || isSubmittingRef.current) return;
 
+    isSubmittingRef.current = true;
     setIsSending(true);
     try {
-      await onSendMessage(draftMessage);
-      onDraftChange('');
+      const sent = await onSendMessage(draftMessage);
+      if (sent !== false) {
+        onDraftChange('');
+      }
     } finally {
       setIsSending(false);
+      isSubmittingRef.current = false;
     }
   }
 
@@ -177,9 +182,26 @@ export function ChatConversation({
                   JavaVerse Tutor
                 </Badge>
                 {isDone && (
-                  <Badge variant="success" size="sm">
-                    <CheckCircle2 size={12} aria-hidden="true" />
-                    <span>Verified</span>
+                  <Badge
+                    variant={
+                      msg.analysis?.result?.usageMetadata?.isSynthetic ||
+                      !msg.analysis?.result?.usageMetadata ||
+                      msg.analysis?.result?.usageMetadata?.provider === 'mock'
+                        ? 'neutral'
+                        : 'success'
+                    }
+                    size="sm"
+                  >
+                    {msg.analysis?.result?.usageMetadata?.isSynthetic ||
+                    !msg.analysis?.result?.usageMetadata ||
+                    msg.analysis?.result?.usageMetadata?.provider === 'mock' ? (
+                      <span>Local Mock</span>
+                    ) : (
+                      <>
+                        <CheckCircle2 size={12} aria-hidden="true" />
+                        <span>Completed</span>
+                      </>
+                    )}
                   </Badge>
                 )}
                 {msg.status === 'FAILED' && (
@@ -251,6 +273,73 @@ export function ChatConversation({
                   {msg.content}
                 </div>
               )}
+
+              {isDone && (
+                <div
+                  style={{
+                    marginTop: 'var(--space-2)',
+                    paddingTop: 'var(--space-2)',
+                    borderTop: '1px solid var(--border-subtle)',
+                    fontSize: 'var(--text-xs)',
+                    color: 'var(--text-muted)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 'var(--space-2)',
+                  }}
+                  data-testid="token-usage-display"
+                >
+                  {(() => {
+                    const analysis = msg.analysis;
+                    const res = analysis?.result as Record<string, unknown> | undefined;
+                    const usage = res?.usageMetadata as
+                      | {
+                          provider?: string;
+                          model?: string;
+                          inputTokens?: number | null;
+                          outputTokens?: number | null;
+                          totalTokens?: number | null;
+                          isSynthetic?: boolean;
+                        }
+                      | undefined;
+
+                    const providerId =
+                      (res?.providerId as string | undefined) ||
+                      usage?.provider ||
+                      (analysis?.modelId?.includes('mock') ? 'mock' : undefined);
+
+                    const isMock =
+                      providerId === 'mock' ||
+                      usage?.isSynthetic === true ||
+                      usage?.provider === 'mock' ||
+                      analysis?.modelId === 'mock-analyzer-v1' ||
+                      (!providerId && !analysis?.modelId);
+
+                    if (isMock) {
+                      return <span>Local Mock · No external token usage</span>;
+                    }
+
+                    if (
+                      usage &&
+                      typeof usage.inputTokens === 'number' &&
+                      typeof usage.outputTokens === 'number' &&
+                      typeof usage.totalTokens === 'number'
+                    ) {
+                      const prov = usage.provider || providerId || 'External';
+                      const provLabel = prov.charAt(0).toUpperCase() + prov.slice(1);
+                      const modelName = usage.model || analysis?.modelId || 'default';
+                      return (
+                        <span>
+                          {provLabel} · {modelName} · {usage.inputTokens.toLocaleString()} input
+                          tokens · {usage.outputTokens.toLocaleString()} output tokens ·{' '}
+                          {usage.totalTokens.toLocaleString()} total tokens
+                        </span>
+                      );
+                    }
+
+                    return <span>Token usage not reported by provider</span>;
+                  })()}
+                </div>
+              )}
             </div>
           );
         })}
@@ -271,14 +360,27 @@ export function ChatConversation({
 
         <div className={styles.composerFooter}>
           <span className={styles.charCount}>{draftMessage.length} / 10,000 characters</span>
+          {(isWorking || isSending) && (
+            <span
+              role="status"
+              aria-live="polite"
+              className={styles.processingStatus}
+              data-testid="composer-processing-status"
+            >
+              Processing question...
+            </span>
+          )}
           <Button
             type="submit"
             variant="primary"
             size="sm"
             disabled={!draftMessage.trim() || isWorking || isSending}
+            aria-busy={isWorking || isSending ? 'true' : 'false'}
+            aria-label="Send Question"
+            data-testid="send-question-button"
           >
             <Send size={14} aria-hidden="true" />
-            <span>{isWorking ? 'Processing...' : 'Send Question'}</span>
+            <span>Send Question</span>
           </Button>
         </div>
       </form>

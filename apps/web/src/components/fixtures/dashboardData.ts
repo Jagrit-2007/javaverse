@@ -127,20 +127,26 @@ export const DETERMINISTIC_DASHBOARD_DATA: DashboardData = {
   ],
 };
 
-export type DashboardFixtureState = 'standard' | 'loading' | 'empty' | 'error';
+export type DashboardFixtureState = 'standard' | 'loading' | 'empty' | 'error' | null;
 
 /**
  * Returns the active dashboard fixture state.
  * Strictly gated by E2E_FIXTURES_ENABLED=true to prevent production backdoors.
+ * Returns null when no fixture override is active, requiring real user progress data.
  */
 export function getDashboardFixtureState(searchParams?: {
   [key: string]: string | string[] | undefined;
 }): DashboardFixtureState {
   if (process.env.E2E_FIXTURES_ENABLED === 'true' && searchParams) {
     const fixture = searchParams['_fixture'];
-    if (fixture === 'loading' || fixture === 'empty' || fixture === 'error') {
+    if (
+      fixture === 'loading' ||
+      fixture === 'empty' ||
+      fixture === 'error' ||
+      fixture === 'standard'
+    ) {
       return fixture;
     }
   }
-  return 'standard';
+  return null;
 }

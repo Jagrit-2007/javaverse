@@ -115,16 +115,32 @@ export async function awardPracticeProgressRewards(
   }
 
   // Fetch or initialize rewards safely under concurrent access
-  const rewards = await prisma.userReward.upsert({
-    where: { userId },
-    create: {
-      userId,
-      xp: 0,
-      streakDays: 0,
-      lastActivityDate: null,
-    },
-    update: {},
-  });
+  let rewards;
+  try {
+    rewards = await prisma.userReward.upsert({
+      where: { userId },
+      create: {
+        userId,
+        xp: 0,
+        streakDays: 0,
+        lastActivityDate: null,
+      },
+      update: {},
+    });
+  } catch (err: unknown) {
+    if (
+      typeof err === 'object' &&
+      err !== null &&
+      'code' in err &&
+      (err as { code: string }).code === 'P2002'
+    ) {
+      rewards = await prisma.userReward.findUniqueOrThrow({
+        where: { userId },
+      });
+    } else {
+      throw err;
+    }
+  }
 
   // Calculate streak update
   const todayUtc = new Date().toISOString().slice(0, 10);
@@ -282,19 +298,38 @@ export async function awardLessonProgressRewards(
 
   const xpEarned = type === 'quiz' ? 25 : 50;
 
-  await prisma.userReward.upsert({
-    where: { userId },
-    update: {
-      xp: { increment: xpEarned },
-      lastActivityDate: new Date().toISOString().slice(0, 10),
-    },
-    create: {
-      userId,
-      xp: xpEarned,
-      streakDays: 1,
-      lastActivityDate: new Date().toISOString().slice(0, 10),
-    },
-  });
+  try {
+    await prisma.userReward.upsert({
+      where: { userId },
+      update: {
+        xp: { increment: xpEarned },
+        lastActivityDate: new Date().toISOString().slice(0, 10),
+      },
+      create: {
+        userId,
+        xp: xpEarned,
+        streakDays: 1,
+        lastActivityDate: new Date().toISOString().slice(0, 10),
+      },
+    });
+  } catch (err: unknown) {
+    if (
+      typeof err === 'object' &&
+      err !== null &&
+      'code' in err &&
+      (err as { code: string }).code === 'P2002'
+    ) {
+      await prisma.userReward.update({
+        where: { userId },
+        data: {
+          xp: { increment: xpEarned },
+          lastActivityDate: new Date().toISOString().slice(0, 10),
+        },
+      });
+    } else {
+      throw err;
+    }
+  }
 
   const newlyAwardedBadges: string[] = [];
   try {

@@ -9,7 +9,6 @@ interface TopBarProps {
   onSearchClick?: () => void;
   user?: {
     displayName: string;
-    role: string;
   };
 }
 
@@ -26,16 +25,24 @@ export function TopBar({ onSearchClick, user }: TopBarProps) {
       const csrfData = await csrfRes.json();
       const token = csrfData?.data?.csrfToken;
 
-      await fetch('/api/v1/auth/logout', {
+      const res = await fetch('/api/v1/auth/logout', {
         method: 'POST',
         headers: {
           'x-csrf-token': token || '',
         },
       });
+      if (res.ok) {
+        await res.json();
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem('external_ai_consent');
+        }
+        window.location.href = '/auth/login';
+        return;
+      }
     } catch {
-      // Proceed with redirection even if network fails
+      // Do not navigate away if logout request fails
     } finally {
-      window.location.href = '/auth/login';
+      setLoggingOut(false);
     }
   };
 
@@ -79,8 +86,8 @@ export function TopBar({ onSearchClick, user }: TopBarProps) {
         <div
           className={styles.avatarButton}
           role="img"
-          aria-label={`${displayName} profile (${user?.role || 'Member'})`}
-          title={`${displayName} (${user?.role || 'Member'})`}
+          aria-label={`${displayName} profile (Learner)`}
+          title={`${displayName} (Learner)`}
         >
           <span aria-hidden="true">{initial}</span>
         </div>

@@ -58,8 +58,24 @@ export const SolutionSchema = z.object({
     .optional(),
 });
 
+export const UsageMetadataSchema = z.object({
+  provider: z.string(),
+  model: z.string(),
+  providerId: z.string().optional(),
+  modelId: z.string().optional(),
+  inputTokens: z.number().int().nonnegative().nullable().optional(),
+  outputTokens: z.number().int().nonnegative().nullable().optional(),
+  totalTokens: z.number().int().nonnegative().nullable().optional(),
+  isSynthetic: z.boolean().optional(),
+  fallbackUsed: z.boolean().optional(),
+  fallbackReason: z.string().nullable().optional(),
+});
+export type UsageMetadata = z.infer<typeof UsageMetadataSchema>;
+
 export const PedagogicalAnalysisSchema = z.object({
   schemaVersion: z.literal(1).default(1),
+  providerId: z.string().optional(),
+  modelId: z.string().optional(),
   meta: z.object({
     topic: z.string(),
     subtopics: z.array(z.string()).default([]),
@@ -109,6 +125,7 @@ export const PedagogicalAnalysisSchema = z.object({
       }),
     )
     .default([]),
+  usageMetadata: UsageMetadataSchema.optional(),
 });
 
 export type VizStep = z.infer<typeof VizStepSchema>;

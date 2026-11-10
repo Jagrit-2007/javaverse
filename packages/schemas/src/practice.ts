@@ -152,7 +152,6 @@ export type SaveLibraryItemRequest = z.infer<typeof SaveLibraryItemRequestSchema
 export const UserSettingsSchema = z.object({
   displayName: z.string().nullable(),
   email: z.string().email(),
-  role: z.string(),
   theme: z.enum(['light', 'dark', 'system']),
   defaultJavaVersion: z.string(),
   consentImprove: z.boolean(),

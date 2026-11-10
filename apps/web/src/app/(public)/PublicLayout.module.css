@@ -92,6 +92,46 @@
   gap: var(--space-2);
 }
 
+.loginBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 var(--space-2);
+  color: var(--text-primary);
+  font-size: 0.72rem;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color var(--transition-fast), background-color var(--transition-fast);
+}
+
+@media (min-width: 480px) {
+  .loginBtn {
+    min-height: 40px;
+    padding: 0 var(--space-3);
+    font-size: var(--text-xs);
+  }
+}
+
+@media (min-width: 640px) {
+  .loginBtn {
+    min-height: 44px;
+    padding: 0 var(--space-4);
+    font-size: var(--text-sm);
+  }
+}
+
+.loginBtn:hover {
+  background-color: var(--bg-surface-subtle);
+}
+
+.loginBtn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 .dashboardBtn {
   display: inline-flex;
   align-items: center;

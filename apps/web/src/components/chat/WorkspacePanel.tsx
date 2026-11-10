@@ -42,6 +42,16 @@ export interface AnalysisDetails {
   followUps?: string[];
   relatedLessons?: string[];
   practice?: Array<{ prompt?: string; difficulty?: string }>;
+  usageMetadata?: {
+    provider: string;
+    model: string;
+    inputTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
+    isSynthetic?: boolean;
+    fallbackUsed?: boolean;
+    fallbackReason?: string;
+  };
 }
 
 interface WorkspacePanelProps {
@@ -175,7 +185,7 @@ export function WorkspacePanel({
                   color: 'var(--text-secondary)',
                 }}
               >
-                Java 21 Source Code (Verified in Sandbox)
+                Java 21 Source Code · Execution mode: Local Mock
               </span>
               <Button variant="secondary" size="sm" onClick={handleCopy} disabled={!solutionCode}>
                 {copied ? (
@@ -190,7 +200,7 @@ export function WorkspacePanel({
             <pre className={styles.codeArea}>
               <code>
                 {solutionCode ||
-                  '// Awaiting question submission...\n// The verified Java solution will be displayed here.'}
+                  '// Awaiting question submission...\n// The Java solution will be displayed here.'}
               </code>
             </pre>
           </div>

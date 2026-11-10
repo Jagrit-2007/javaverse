@@ -31,7 +31,7 @@ describe('CSRF Protection', () => {
     expect(verifyPreAuthCsrfToken(loginToken, 'login', csrfKey)).toBe(true);
 
     // Wrong flow
-    expect(verifyPreAuthCsrfToken(loginToken, 'bootstrap', csrfKey)).toBe(false);
+    expect(verifyPreAuthCsrfToken(loginToken, 'signup', csrfKey)).toBe(false);
 
     // Tampered token
     const tampered = loginToken.slice(0, -4) + '0000';

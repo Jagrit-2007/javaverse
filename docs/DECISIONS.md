@@ -335,3 +335,290 @@ Status: Approved & Implemented
 
 8. **Hardened Backup File Permissions (LOW 3)**:
    - Enforced `umask 077` and `chmod 600` on database backups and checksums in `scripts/backup-db.sh`, verifying permissions independently of operator shell configuration.
+
+## Local-First Five-Account Model & Theme Remediation Decisions
+
+Status: Approved & Implemented
+
+1. **Local-First Five-Account Model (Owner Decision)**:
+   - JavaVerse is an offline/local-first application intended for up to 5 local users (`LOCAL_ACCOUNT_LIMIT = 5`).
+   - Normal public local signup enabled: any visitor can create an account directly from `/auth/signup`, accessible via prominent "Create account" actions on both the landing page (`/`) and login page (`/auth/login`).
+   - Accounts are created with role `MEMBER` and `emailVerifiedAt: new Date()` (immediate verification) because local mode requires no external mail delivery service.
+   - Successful registration immediately establishes a valid authenticated session, sets the approved secure session cookie (`javaverse_session`), and redirects safely to `/dashboard`.
+   - Hard capacity limit of exactly 5 active accounts enforced transactionally in PostgreSQL via advisory lock `pg_advisory_xact_lock(74619284)` (`ACCOUNT_CREATION_ADVISORY_LOCK_ID`), counting non-deleted users (`status != 'DELETED'`).
+   - When capacity is reached, returns HTTP 409 Conflict with the exact user-friendly message: `"This JavaVerse installation has reached its limit of 5 accounts."`.
+   - Existing user login, password recovery, and logout continue operating normally when the account limit is reached.
+   - Docker volumes (`postgres_data`) preserve local PostgreSQL accounts across normal container restarts; note caution that `docker compose down -v` permanently deletes local accounts.
+   - Note: `container_runner` remains REJECTED (`SANDBOX_PROVIDER=mock`).
+
+2. **Deprecation & Inactivation of Legacy OWNER Bootstrap**:
+   - The workspace owner bootstrap screen (`/auth/bootstrap`) redirects to `/auth/signup`.
+   - Legacy bootstrap endpoints (`/api/v1/auth/bootstrap/validate` and `/api/v1/auth/bootstrap/finalize`) are permanently deactivated, returning HTTP 403 `BOOTSTRAP_DISABLED`.
+   - No terminal command, bootstrap token, invitation code, owner approval, or seeded credentials are required for fresh setup.
+   - No browser or client can create or elevate an OWNER account.
+   - Legacy OWNER database role and constraints are preserved in PostgreSQL to prevent destructive schema migrations; legacy OWNER support is documented as inactive.
+
+3. **Admin Surface Inactivation**:
+   - `MEMBER` accounts cannot access `/dashboard/admin` or `/api/v1/admin/*` (HTTP 403 `FORBIDDEN` enforced server-side).
+   - Admin navigation items are hidden from normal member UI.
+   - Existing admin route authorization and database models are retained without deletion; admin features are treated as inactive until a future administrative model is approved.
+
+4. **Deterministic Theme Resolution & Dark Mode Fix**:
+   - `SettingsView.tsx` refactored to consume the centralized `useTheme()` hook directly rather than maintaining disconnected local React state.
+   - Immediate client-side application sets `document.documentElement.setAttribute('data-theme', theme)` and stores preference in `localStorage`.
+   - Asynchronous background synchronization to `PATCH /api/v1/settings` persists preferences to PostgreSQL for authenticated sessions.
+   - `tokens.css` augmented with semantic surface tokens (`--bg-surface-raised`, `--surface-raised`, `--surface-base`, `--card-bg`, `--card-border`, `--brand-contrast`) across light and dark themes to eradicate hardcoded white backgrounds in dark mode.
+   - CSS modules in dashboard (`Practice.module.css`, `ProgressDashboard.module.css`, `PracticeWorkspace.module.css`, `LibraryView.tsx`) refactored to use semantic theme tokens.
+   - Inline `ThemeScript.tsx` resolves unstored/system preference dynamically using `matchMedia('(prefers-color-scheme: dark)')` to eliminate white flash. Static sha256 hash synchronized in CSP headers (`packages/security/src/static-hashes.ts` and `scripts/extract-static-hashes.mjs`).
+
+5. **Development CSP & Client-Side Form Hydration**:
+   - In Next.js development mode (`NODE_ENV=development`), Turbopack/Next.js injects dynamic inline scripts and HMR websockets. Strict static hash CSP previously caused Firefox to block script execution, preventing React hydration and event listener attachment on `/auth/login` and `/auth/signup`.
+   - Middleware now supplies dynamic nonce CSP (`buildDynamicNonceCsp`) during development (`isDev`), allowing React event listeners to hydrate and attach reliably.
+   - Production builds (`NODE_ENV=production`) strictly retain immutable static script hashes without weakening CSP.
+   - Forms on `/auth/login` and `/auth/signup` updated with explicit `method="POST"` and resilient on-demand CSRF token fetching in `handleSubmit` to prevent submission race conditions.
+
+6. **Worker Development Script & Environment Loading**:
+   - Worker package `apps/worker` dev script was invoking missing `src/index.js` while the codebase is TypeScript. Updated `package.json` to `"dev": "tsx watch src/index.ts"`.
+   - `apps/worker/src/env.ts` updated to load environment files via `dotenv` (`.env.local`, `../../.env.local`, `.env`) before `validateEnv(process.env)`, allowing standalone worker execution during `pnpm dev`.
+
+## Final Product-Alignment Remediation (Open-Source, Local-First Architecture)
+
+1. **One User-Facing Account Model**:
+   - JavaVerse operates strictly with one active account model: the learner account.
+   - All accounts have identical product permissions; account #1 and account #5 behave identically.
+   - Removed active owner, admin, bootstrap token, invitation, tenant, and seat concepts from landing, login, signup, dashboard navigation, and account settings.
+   - Inactive admin routes remain server-protected with HTTP 403. Retained database role enums (`OWNER`, `MEMBER`) as inactive compatibility debt to avoid destructive database migrations.
+   - Display names default to "Learner", never deriving from email local parts or exposing role names.
+
+2. **Public Local Signup & 5-Account Capacity**:
+   - Public signup at `/auth/signup` is the sole promoted onboarding path, returning HTTP 201 with secure session cookie.
+   - Database advisory lock serializes concurrent registrations against the hard limit `LOCAL_ACCOUNT_LIMIT = 5`.
+   - Clear capacity response: `"This local JavaVerse installation has reached its limit of 5 accounts. Existing users can still sign in."`.
+   - Role names are omitted from signup and login client responses.
+
+3. **Real User-Specific Progress**:
+   - Replaced static fixture progress (`DETERMINISTIC_DASHBOARD_DATA`) with real, authenticated queries via `getUserProgressOverview(userId)` and `prisma.userProgress`.
+   - New accounts start at exactly 0% overall progress, 0% track progress, 0 XP, 0 streak, and empty recent lessons list (`[]`).
+   - Hero banner dynamically shows "Start Learning" (href: `/dashboard/learn`) and "Welcome, <displayName>!" for zero completions; "Continue Learning" for accounts with progress.
+   - Recent lessons renders honest copy when empty: `"No lessons completed yet. Start your Java learning journey to begin tracking progress."`.
+
+4. **Transparent AI Provider & Usage Architecture**:
+   - Maintained `mock` as primary AI provider (`AI_PROVIDER_PRIMARY=mock`) returning `providerId: 'mock'`, `modelId: 'mock-analyzer-v1'`, and zero token usage (`inputTokens: 0, outputTokens: 0, totalTokens: 0`).
+   - Allowed providers (`mock`, `gemini`, `anthropic`) and model allowlists (`gemini-2.5-flash`, `claude-3-5-sonnet-20241022`) strictly enforced in factory.
+   - In Ask JavaVerse workspace, rendered visible AI mode banner indicating active provider, active model, and usage note.
+   - Implemented External AI Consent modal for Gemini/Anthropic before first external request, allowing Continue, Cancel, and session-scoped opt-out.
+   - Pre-prompt local PII scrubbing enforced via `@javaverse/security` `scrubPii` before sending code or prompts to AI providers.
+   - Replaced unapproved sandbox verification claims (`Verified in Sandbox`) with accurate execution mode (`Execution mode: Local Mock`).
+
+5. **Deterministic Worker Environment Resolution**:
+   - `apps/worker/src/env.ts` implements `findRepoRoot()` by searching upward for `pnpm-workspace.yaml`.
+   - Loads `.env.local` and `.env` strictly from the repository root; eliminates any resolution of `apps/.env.local`.
+   - Preserves parent-process environment variables and avoids secret logging.
+
+6. **Dev-Tools Overlay Isolation & CSP Correctness**:
+   - Confirmed "Route Info" and "Clear Segment Overrides" originate from Next.js 15 dev-mode Turbopack internal DevTools (`next-devtools/dev-overlay`), which are automatically omitted from production builds (`next build`).
+   - Production CSP enforces strict script nonces/hashes with zero `'unsafe-eval'` and zero wildcards. Development CSP permits dynamic nonce CSP for fast refresh and hydration.
+
+7. **start-dev.sh Safety & Persistence Contract**:
+   - Augmented `start-dev.sh` with prerequisite verification (`docker`, `pnpm`), status reporting, and safety documentation.
+   - Explicitly clarified that Ctrl+C terminates Node processes while preserving Docker containers and the `javaverse_postgres_data` volume.
+   - Added explicit warnings against `docker compose down -v` to prevent accidental loss of local accounts.
+
+## Closure Audit & Alignment Remediation
+
+1. **Original Manual Login Failure Explained**:
+   - Both root `.env.local` and `apps/web/.env.local` configure the identical PostgreSQL database (`postgresql://postgres:postgres@127.0.0.1:5432/javaverse`).
+   - Automated integration and E2E test suites (`signup.test.ts`, `auth.spec.ts`) execute `prisma.user.deleteMany()` in `beforeEach()` hooks to ensure clean test state.
+   - When manual testing occurred, an account was successfully created and hashed with Argon2id in `javaverse`. Running any automated test suite or `test:clean-db` subsequently purged all rows in the `users` table.
+   - On returning to log in, `prisma.user.findUnique({ where: { email } })` returned null, causing the endpoint to return HTTP 401 `"Invalid email or password"`. Returning to `/auth/signup` succeeded because the email address was no longer taken.
+   - Architecture resolution: Separate development and test database URLs or preserve local state by running tests against isolated test databases.
+
+2. **Neutral User-Facing Role Terminology**:
+   - Eradicated all instances of `"403 Forbidden - Owner Access Required"` and `"Only workspace owners can..."`.
+   - Replaced with neutral copy: `"This feature is not available in the current JavaVerse version."` and `"Administrative features are inactive in this installation."`.
+   - Renamed E2E test from `"Member Login Flow"` to `"Learner Login Flow"`.
+   - Verified that no learner account can access inactive admin pages or APIs.
+
+3. **V1 Provider-Selection Policy**:
+   - Installation-wide provider selection only: The local installation operator determines the active provider (`AI_PROVIDER_PRIMARY`) and model (`GEMINI_MODEL`, `ANTHROPIC_MODEL`) via server-side environment variables.
+   - Learners can view active provider, active model, local/external status, and usage metadata.
+   - Learners cannot modify installation API keys, select unconfigured providers, or submit arbitrary model identifiers.
+
+4. **AI Consent Wording and Browser Session Persistence**:
+   - Consent dialog checkbox updated to accurate wording: `"Remember for this browser session"`.
+   - Stored in `sessionStorage` under `external_ai_consent`.
+   - TopBar `handleLogout` explicitly clears `sessionStorage.removeItem('external_ai_consent')` so subsequent users on the same machine/browser do not inherit consent.
+   - Clicking "Cancel" on the consent modal closes the modal, retains the draft prompt in the composer textarea, creates zero durable jobs, and initiates zero network requests.
+
+5. **AI Limits & Safe Defaults**:
+   - Implemented configurable defaults in `packages/schemas/src/env.ts` and `apps/web/src/lib/aiLimits.ts`:
+     - `EXTERNAL_AI_DAILY_REQUEST_LIMIT_PER_USER = 50` (prevents runaway API costs while accommodating extensive study).
+     - `EXTERNAL_AI_MAX_CONCURRENCY = 2` (prevents exhausting provider RPM tiers and local connection pools).
+   - Enforced Redis keys:
+     - Duplicate submission lock: `ai:submit:lock:<userId>` (3s TTL).
+     - Per-user daily request count: `ai:limit:daily:<userId>:<YYYY-MM-DD>` (24h TTL).
+     - Global installation concurrency: `ai:concurrency:global`.
+   - Local Mock mode (`AI_PROVIDER_PRIMARY=mock`) bypasses all external AI limits by default.
+
+6. **Token-Usage Metadata Durability**:
+   - Usage metadata is durably stored in PostgreSQL inside `Analysis.result.usageMetadata` (linked to `Message`).
+   - Page refreshes and reopening past chats retrieve the persisted `analysis.result.usageMetadata`.
+   - Nullable fields (`inputTokens`, `outputTokens`, `totalTokens`, `fallbackReason`) handled gracefully; missing tokens format as `"Token usage not reported by provider"`.
+   - Local mock mode explicitly reports `"Local Mock · No external token usage"`, never fabricating synthetic token metrics.
+
+## Final Data-Safety & AI-Verification Closure
+
+1. **Test-Database Isolation Architecture**:
+   - Normal development database: `javaverse` (remains untouched by automated test runs).
+   - Test execution database: `javaverse_test` (used by Vitest and Playwright test suites).
+   - Migration deployment verification database: `javaverse_clean_verify` (used by `test:clean-db`).
+   - Disaster recovery verification database: `javaverse_backup_verify_test` (used by `test:backup-restore`).
+   - Central safety guard `assertSafeTestDatabase(databaseUrl, { requireTestEnv?: boolean })` implemented in `@javaverse/db`:
+     - Strictly allowlists: `javaverse_test`, `javaverse_clean_verify`, `javaverse_backup_verify_test`.
+     - Strictly rejects: `javaverse`, `postgres`, `production`, `prod`, `template0`, `template1`, malformed URLs, and missing database names.
+     - Enforces `NODE_ENV=test` before permitting destructive actions (`deleteMany`, `delete`, `truncate`, `drop`).
+     - Invoked before all test cleanups across Vitest and Playwright.
+     - Validated by end-to-end persistence safety test (`dev-db-persistence.test.ts`) proving development database marker accounts survive full test suite cleanups.
+
+2. **Canonical AI Environment Configuration**:
+   - Standardized on one canonical set of configuration variables:
+     - `AI_PROVIDER_PRIMARY`: `mock` | `gemini` | `anthropic` (default: `mock`)
+     - `EXTERNAL_AI_ENABLED`: `false` | `true` (default: `false`)
+     - `GEMINI_API_KEY`: optional string
+     - `GEMINI_MODEL`: default `gemini-2.5-flash`
+     - `ANTHROPIC_API_KEY`: optional string
+     - `ANTHROPIC_MODEL`: default `claude-3-5-sonnet-20241022`
+     - `EXTERNAL_AI_DAILY_REQUEST_LIMIT_PER_USER`: default `50`
+     - `EXTERNAL_AI_MAX_CONCURRENCY`: default `2`
+   - Synchronized across Zod schemas, provider factory, worker, endpoints, and `.env.example`.
+
+3. **Complete AI Limit Behavior & Concurrency Reclamation**:
+   - Redis daily key format: `ai:limit:daily:<userId>:<YYYY-MM-DD>` with bounded TTL calculated from UTC midnight + 1h buffer.
+   - Global concurrency key: `ai:concurrency:global` with safety TTL, completely separate from per-user quota keys.
+   - Safe HTTP 429 response communicating retry timing (in hours until UTC midnight for daily limit; seconds for concurrency).
+   - Quota refund helper (`refundAiDailyQuota`) ensures requests rejected before dispatch do not decrement learner daily limit.
+   - Concurrency slots automatically reclaimed on completion, failure, cancellation, or error via `try...finally` in worker and API.
+
+4. **Honest Privacy Copy & Logging Safeguards**:
+   - Replaced claims that PII scrubbing stops all prompt injection with accurate copy:
+     _"JavaVerse applies automated redaction and structured prompt boundaries. Automated detection may not identify every sensitive value. Do not submit passwords, API keys, confidential code, or private information."_
+   - Verified worker and web logger output contain only job metadata IDs (`jobId`, `chatId`, `userId`, `messageId`), omitting full prompts and raw model responses.
+
+5. **27-Scenario Browser E2E Verification**:
+   - Playwright Ask-AI suite (`apps/web/test/e2e/ask-ai.spec.ts`) upgraded to cover all 27 required scenarios across Chromium and Firefox, including mock execution, external stubbing, session consent clearing, cross-user chat/usage isolation, and dark mode.
+
+## Single-Account Model & Legacy Role Removal Decisions
+
+Status: Approved & Implemented
+
+1. **Definitive Single-Account Architecture (Learner Account Only)**:
+   - JavaVerse has exactly one account type: **learner account**.
+   - Every active account possesses identical capabilities and permissions.
+   - The active concepts of OWNER, MEMBER, administrator, privileged first account, admin console, admin APIs, bootstrap flow, bootstrap tokens, invitation flows, invited accounts, seat reservations, and workspace ownership are permanently eradicated.
+   - All role-based authorization checks, guards, and middleware barriers are removed.
+
+2. **Forward-Only Database Migration (`20261109210000_single_learner_account_model`)**:
+   - Prior to applying the migration, a non-destructive database backup was created and verified (`./backups/javaverse_backup_20261109_155417.sql.gz`).
+   - Legacy OWNER accounts converted to uniform learner accounts before structural modifications.
+   - User ids, emails, password hashes, sessions, chats, progress, streaks, bookmarks, and analysis histories are preserved 100%.
+   - Dropped schema elements:
+     - `users.role` column and associated `chk_users_role` constraint.
+     - `idx_users_single_active_owner` partial unique index.
+     - `invitations` table, its constraints, foreign keys, and indexes.
+     - `deployment_limits.registration_mode` column.
+     - `audit_logs.actor_role_at_time` column.
+     - PostgreSQL enums `Role` and `UserRole`.
+   - `packages/db/prisma/schema.prisma` synchronized: `model User` has zero role column; `model Invitation` completely deleted; `deployment_limits` has no registration mode.
+
+3. **Complete Codebase Cleanse of Obsolete Surfaces**:
+   - Deleted all legacy admin, bootstrap, and invitation routes and files:
+     - `apps/web/src/app/(dashboard)/dashboard/admin`
+     - `apps/web/src/app/admin`
+     - `apps/web/src/app/api/v1/admin`
+     - `apps/web/src/app/(public)/auth/bootstrap`
+     - `apps/web/src/app/api/v1/auth/bootstrap`
+     - `apps/web/src/app/(public)/auth/invite`
+     - `apps/web/src/app/api/v1/invitations`
+     - `apps/web/src/lib/adminAuth.ts`
+     - `apps/web/src/lib/invitations.ts`
+     - `scripts/bootstrap-owner.mjs`
+     - Obsolete test suites: `admin-auth.test.ts`, `bootstrap.test.ts`, `concurrency.test.ts`, `admin.spec.ts`.
+   - Neutral redirect handling in middleware: legacy `/auth/bootstrap` and `/auth/invite` redirect cleanly to `/auth/signup`; `/admin` and `/dashboard/admin` redirect to `/dashboard`.
+
+4. **Session Cookie Protocol & Multi-Browser Compatibility**:
+   - Implemented `getSessionTokenFromCookies` checking both `__Host-javaverse_session` and `javaverse_session`.
+   - RFC 6265bis specifies that `__Host-` prefixed cookies require HTTPS. In local HTTP testing, browsers like Firefox reject `__Host-` cookies. Checking both names enables seamless local multi-browser testing (Chromium + Firefox) without sacrificing production security.
+   - Synchronized `APP_MASTER_KEY` across Playwright test runner and Next.js server processes to guarantee identical session HMAC derivation.
+
+## Ask-AI Token Usage Rendering & Composer Busy State Decisions
+
+Status: Approved & Implemented
+
+1. **Persistent Mock Provider Metadata & Honest Token Usage Display**:
+   - In `apps/worker/src/processors/analysisProcessor.ts`, Mock analysis results persist:
+     ```json
+     {
+       "providerId": "mock",
+       "modelId": "mock-analyzer-v1",
+       "usageMetadata": {
+         "inputTokens": 0,
+         "outputTokens": 0,
+         "totalTokens": 0,
+         "isSynthetic": true
+       }
+     }
+     ```
+   - In `apps/web/src/components/chat/ChatConversation.tsx`, `[data-testid="token-usage-display"]` reliably detects mock execution from `providerId === "mock"`, `modelId.startsWith("mock")`, or `usageMetadata.isSynthetic === true`, displaying:
+     `Local Mock · No external token usage`
+   - If usage metadata is missing or provider is unmetered mock, honest compatibility copy is rendered rather than fabricating external token counts.
+   - Usage metadata remains persistent and visible across page reloads, chat reopening, and SSE reconnections.
+
+2. **Persistent Composer Mount & Accessible Busy State**:
+   - The Ask-AI composer and Send Question button remain mounted during submission and background job processing.
+   - The button retains its stable accessible name `Send Question` at all times (`aria-label="Send Question"`) rather than swapping inner text to `Processing...`.
+   - When busy (`isWorking || isSending`), the button is `disabled`, has `aria-disabled="true"`, and `aria-busy="true"`.
+   - Processing progress is communicated to screen readers via adjacent status element: `<span role="status" aria-live="polite" data-testid="composer-processing-status">Processing question...</span>`.
+
+3. **Multi-Layer Duplicate Submission Prevention**:
+   - Client layer: Synchronous ref `isSubmittingRef.current = true` prevents multiple HTTP dispatches from rapid duplicate clicks within the same event loop frame.
+   - API / DB layer: `postUserMessage` acquires a transaction-level PostgreSQL advisory lock `SELECT pg_advisory_xact_lock(hashtext('chat_post_' || $chatId))` and checks for any active `PENDING` or `RUNNING` job on the chat before creating a new job.
+   - If an active job exists, `ActiveJobInProgressError` is thrown and returned as HTTP 409 Conflict.
+
+## Credentials Freedom, Password Policy & Sign-In Reliability Decisions
+
+Status: Approved & Implemented
+
+1. **Credential Freedom & Canonical Normalization**:
+   - Registration and login accept any syntactically valid email format (e.g. Gmail, Outlook, academic, or custom domains) without predefined domain allowlists or simulated inbox requirements.
+   - Canonical email normalization (`canonicalizeEmail` in `@javaverse/security`) trims outer whitespace and converts local and domain parts to lowercase (with Punycode conversion for internationalized domain names).
+   - Case-variant duplicate email registration is rejected with HTTP 409 `USER_EXISTS`.
+   - Email lookup during login is case-insensitive and whitespace-safe via canonical normalization.
+
+2. **Strict Password Whitespace Policy**:
+   - Passwords must never be silently trimmed, transformed, or stored in plaintext.
+   - Internal spaces are permitted when the password meets length requirements (12–128 characters).
+   - Leading or trailing whitespace is strictly rejected during registration with the visible error:
+     `Password cannot begin or end with whitespace.`
+   - Policy is enforced synchronously across `packages/schemas/src/auth.ts` (`passwordSchema`, `signupSchema`, `resetPasswordSchema`, `changePasswordSchema`, `acceptInvitationSchema`) and `packages/security/src/password.ts` (`validatePasswordPolicy`).
+   - Login compares the exact submitted password against the stored Argon2id hash without modification. Case-variant passwords fail with generic 401 `INVALID_CREDENTIALS` (`Invalid email or password`).
+
+3. **Playwright Web Server Isolation**:
+   - In `apps/web/playwright.config.ts`, `reuseExistingServer` is set to `false` and guarded with `assertSafeTestDatabase(TEST_DATABASE_URL)`.
+   - This prevents automated E2E tests from executing against a running local development server connected to `javaverse`, preventing test accounts or test wipes from polluting or destroying learner accounts.
+
+4. **Installation & Database Ownership**:
+   - Local-first architecture: Each independently cloned or deployed JavaVerse installation connects exclusively to its configured PostgreSQL instance.
+   - Zero remote database connections or data transmission to the maintainer.
+   - Capacity of 5 local accounts is isolated per installation.
+   - Verified that accounts in a disposable database are completely invisible in the primary development database.
+
+5. **Password Storage & Argon2id Verification**:
+   - JavaVerse hashes passwords using Argon2id. Plaintext passwords are never stored. During sign-in, the exact submitted password is verified against the stored one-way Argon2id hash.
+   - Argon2id password hashing is intentionally one-way and irreversible. Plaintext passwords are never decrypted or recovered.
+   - Password hashes are strictly omitted from API responses, client payloads, logs, exports, and audit records.
+
+6. **Logout, Cookie Expiration & Browser Storage Isolation**:
+   - Logout revokes the server-side session and expires the HttpOnly `javaverse_session` cookie. Browser `sessionStorage` and `localStorage` are separate mechanisms. JavaVerse separately removes session-scoped external-AI consent while preserving the learner's local theme preference.
+   - Logout does not execute indiscriminate `localStorage.clear()` or `sessionStorage.clear()`, preventing data loss of unrelated browser state.
+   - Session-scoped external-AI consent is removed via `sessionStorage.removeItem('external_ai_consent')` so subsequent learners using the same browser session never inherit prior consent.
+   - Logout responses return HTTP 200 without exposing raw session tokens or sensitive session identifiers.

@@ -42,11 +42,25 @@ export default function LoginPage() {
     setSubmitting(true);
 
     try {
+      let activeCsrfToken = csrfToken;
+      if (!activeCsrfToken) {
+        try {
+          const csrfRes = await fetch('/api/v1/auth/csrf?flow=login');
+          const csrfData = await csrfRes.json();
+          activeCsrfToken = csrfData?.data?.csrfToken || '';
+          if (activeCsrfToken) {
+            setCsrfToken(activeCsrfToken);
+          }
+        } catch {
+          // Fall through to request attempt
+        }
+      }
+
       const res = await fetch('/api/v1/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-csrf-token': csrfToken,
+          'x-csrf-token': activeCsrfToken,
         },
         body: JSON.stringify({ email, password }),
       });
@@ -87,7 +101,7 @@ export default function LoginPage() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className={styles.authForm} noValidate>
+        <form method="POST" onSubmit={handleSubmit} className={styles.authForm} noValidate>
           <Input
             id="login-email"
             type="email"
@@ -123,9 +137,9 @@ export default function LoginPage() {
 
         <div className={styles.authFooter}>
           <p>
-            First time setting up the workspace?{' '}
-            <Link href="/auth/bootstrap" className={styles.authLink}>
-              Owner bootstrap
+            Don&apos;t have an account?{' '}
+            <Link href="/auth/signup" className={styles.authLink}>
+              Create account
             </Link>
           </p>
         </div>

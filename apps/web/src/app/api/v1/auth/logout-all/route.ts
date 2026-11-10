@@ -44,7 +44,6 @@ export async function POST(request: NextRequest) {
     action: 'auth.logout_all',
     actorType: 'USER',
     actorUserId: sessionCtx.user.id,
-    actorRoleAtTime: sessionCtx.user.role,
     targetUserId: sessionCtx.user.id,
   });
 

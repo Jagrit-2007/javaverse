@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import type { UserSettings } from '@javaverse/schemas';
+import { useTheme } from '@/components/theme/ThemeProvider';
 
 interface SettingsViewProps {
   initialSettings: UserSettings;
@@ -9,8 +10,11 @@ interface SettingsViewProps {
 }
 
 export function SettingsView({ initialSettings, csrfToken = '' }: SettingsViewProps) {
+  const { theme: activeTheme, setTheme: setActiveTheme } = useTheme();
   const [displayName, setDisplayName] = useState<string>(initialSettings.displayName || '');
-  const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(initialSettings.theme);
+  const [theme, setThemeState] = useState<'light' | 'dark' | 'system'>(
+    initialSettings.theme || activeTheme,
+  );
   const [javaVersion, setJavaVersion] = useState<string>(initialSettings.defaultJavaVersion);
   const [gamificationEnabled, setGamificationEnabled] = useState<boolean>(
     initialSettings.gamificationEnabled,
@@ -24,10 +28,18 @@ export function SettingsView({ initialSettings, csrfToken = '' }: SettingsViewPr
     text: string;
   } | null>(null);
 
+  const handleThemeChange = (nextTheme: 'light' | 'dark' | 'system') => {
+    setThemeState(nextTheme);
+    setActiveTheme(nextTheme);
+  };
+
   async function handleSavePreferences(e: React.FormEvent) {
     e.preventDefault();
     setIsSaving(true);
     setStatusMessage(null);
+
+    // Immediately synchronize client-side theme
+    setActiveTheme(theme);
 
     try {
       const res = await fetch('/api/v1/settings', {
@@ -101,10 +113,12 @@ export function SettingsView({ initialSettings, csrfToken = '' }: SettingsViewPr
       }}
     >
       <header>
-        <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
+        <h1
+          style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}
+        >
           Account Settings & Learning Preferences
         </h1>
-        <p style={{ fontSize: '1rem', color: '#475569', margin: '0.25rem 0 0 0' }}>
+        <p style={{ fontSize: '1rem', color: 'var(--text-secondary)', margin: '0.25rem 0 0 0' }}>
           Manage your profile, theme, sandbox Java version, gamification controls, and data privacy.
         </p>
       </header>
@@ -114,9 +128,19 @@ export function SettingsView({ initialSettings, csrfToken = '' }: SettingsViewPr
           style={{
             padding: '0.75rem 1rem',
             borderRadius: '0.375rem',
-            backgroundColor: statusMessage.type === 'success' ? '#ecfdf5' : '#fef2f2',
-            border: `1px solid ${statusMessage.type === 'success' ? '#a7f3d0' : '#fecaca'}`,
-            color: statusMessage.type === 'success' ? '#047857' : '#b91c1c',
+            backgroundColor:
+              statusMessage.type === 'success'
+                ? 'var(--status-success-bg)'
+                : 'var(--status-danger-bg)',
+            border: `1px solid ${
+              statusMessage.type === 'success'
+                ? 'var(--status-success-text)'
+                : 'var(--status-danger-text)'
+            }`,
+            color:
+              statusMessage.type === 'success'
+                ? 'var(--status-success-text)'
+                : 'var(--status-danger-text)',
             fontSize: '0.875rem',
             fontWeight: 600,
           }}
@@ -133,10 +157,10 @@ export function SettingsView({ initialSettings, csrfToken = '' }: SettingsViewPr
         {/* Profile Section */}
         <section
           style={{
-            backgroundColor: '#ffffff',
+            backgroundColor: 'var(--bg-surface)',
             padding: '1.5rem',
             borderRadius: '0.5rem',
-            border: '1px solid #e2e8f0',
+            border: '1px solid var(--border-subtle)',
             display: 'flex',
             flexDirection: 'column',
             gap: '1rem',
@@ -145,7 +169,12 @@ export function SettingsView({ initialSettings, csrfToken = '' }: SettingsViewPr
         >
           <h2
             id="profile-heading"
-            style={{ fontSize: '1.125rem', fontWeight: 600, color: '#0f172a', margin: 0 }}
+            style={{
+              fontSize: '1.125rem',
+              fontWeight: 600,
+              color: 'var(--text-primary)',
+              margin: 0,
+            }}
           >
             Profile Details
           </h2>
@@ -153,7 +182,7 @@ export function SettingsView({ initialSettings, csrfToken = '' }: SettingsViewPr
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
             <label
               htmlFor="display-name"
-              style={{ fontSize: '0.875rem', fontWeight: 600, color: '#334155' }}
+              style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-secondary)' }}
             >
               Display Name
             </label>
@@ -167,8 +196,10 @@ export function SettingsView({ initialSettings, csrfToken = '' }: SettingsViewPr
               style={{
                 padding: '0.5rem 0.75rem',
                 fontSize: '0.875rem',
-                border: '1px solid #cbd5e1',
+                border: '1px solid var(--border-strong)',
                 borderRadius: '0.375rem',
+                backgroundColor: 'var(--bg-surface)',
+                color: 'var(--text-primary)',
               }}
             />
           </div>
@@ -176,7 +207,7 @@ export function SettingsView({ initialSettings, csrfToken = '' }: SettingsViewPr
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
             <label
               htmlFor="email-readonly"
-              style={{ fontSize: '0.875rem', fontWeight: 600, color: '#334155' }}
+              style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-secondary)' }}
             >
               Email Address (Account Identifier)
             </label>
@@ -188,10 +219,10 @@ export function SettingsView({ initialSettings, csrfToken = '' }: SettingsViewPr
               style={{
                 padding: '0.5rem 0.75rem',
                 fontSize: '0.875rem',
-                border: '1px solid #e2e8f0',
+                border: '1px solid var(--border-subtle)',
                 borderRadius: '0.375rem',
-                backgroundColor: '#f8fafc',
-                color: '#64748b',
+                backgroundColor: 'var(--bg-surface-subtle)',
+                color: 'var(--text-muted)',
               }}
             />
           </div>
@@ -200,10 +231,10 @@ export function SettingsView({ initialSettings, csrfToken = '' }: SettingsViewPr
         {/* Preferences Section */}
         <section
           style={{
-            backgroundColor: '#ffffff',
+            backgroundColor: 'var(--bg-surface)',
             padding: '1.5rem',
             borderRadius: '0.5rem',
-            border: '1px solid #e2e8f0',
+            border: '1px solid var(--border-subtle)',
             display: 'flex',
             flexDirection: 'column',
             gap: '1.25rem',
@@ -212,7 +243,12 @@ export function SettingsView({ initialSettings, csrfToken = '' }: SettingsViewPr
         >
           <h2
             id="preferences-heading"
-            style={{ fontSize: '1.125rem', fontWeight: 600, color: '#0f172a', margin: 0 }}
+            style={{
+              fontSize: '1.125rem',
+              fontWeight: 600,
+              color: 'var(--text-primary)',
+              margin: 0,
+            }}
           >
             Learning & Appearance Defaults
           </h2>
@@ -220,19 +256,21 @@ export function SettingsView({ initialSettings, csrfToken = '' }: SettingsViewPr
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
             <label
               htmlFor="theme-select"
-              style={{ fontSize: '0.875rem', fontWeight: 600, color: '#334155' }}
+              style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-secondary)' }}
             >
               Appearance Theme
             </label>
             <select
               id="theme-select"
               value={theme}
-              onChange={(e) => setTheme(e.target.value as 'light' | 'dark' | 'system')}
+              onChange={(e) => handleThemeChange(e.target.value as 'light' | 'dark' | 'system')}
               style={{
                 padding: '0.5rem 0.75rem',
                 fontSize: '0.875rem',
-                border: '1px solid #cbd5e1',
+                border: '1px solid var(--border-strong)',
                 borderRadius: '0.375rem',
+                backgroundColor: 'var(--bg-surface)',
+                color: 'var(--text-primary)',
               }}
             >
               <option value="system">System Default</option>
@@ -244,7 +282,7 @@ export function SettingsView({ initialSettings, csrfToken = '' }: SettingsViewPr
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
             <label
               htmlFor="java-version"
-              style={{ fontSize: '0.875rem', fontWeight: 600, color: '#334155' }}
+              style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-secondary)' }}
             >
               Default Sandbox JDK Version
             </label>
@@ -255,8 +293,10 @@ export function SettingsView({ initialSettings, csrfToken = '' }: SettingsViewPr
               style={{
                 padding: '0.5rem 0.75rem',
                 fontSize: '0.875rem',
-                border: '1px solid #cbd5e1',
+                border: '1px solid var(--border-strong)',
                 borderRadius: '0.375rem',
+                backgroundColor: 'var(--bg-surface)',
+                color: 'var(--text-primary)',
               }}
             >
               <option value="21">Java 21 (LTS) - Recommended</option>
@@ -278,11 +318,17 @@ export function SettingsView({ initialSettings, csrfToken = '' }: SettingsViewPr
             <div>
               <label
                 htmlFor="gamification-check"
-                style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0f172a' }}
+                style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-primary)' }}
               >
                 Enable Gamification (XP, Streaks, Badges)
               </label>
-              <p style={{ fontSize: '0.8125rem', color: '#64748b', margin: '0.125rem 0 0 0' }}>
+              <p
+                style={{
+                  fontSize: '0.8125rem',
+                  color: 'var(--text-muted)',
+                  margin: '0.125rem 0 0 0',
+                }}
+              >
                 Turn off to learn without gaming elements. We never use dark patterns or pressure to
                 continue streaks.
               </p>
@@ -300,11 +346,17 @@ export function SettingsView({ initialSettings, csrfToken = '' }: SettingsViewPr
             <div>
               <label
                 htmlFor="consent-check"
-                style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0f172a' }}
+                style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-primary)' }}
               >
                 Allow anonymized questions to improve JavaVerse AI models (Optional)
               </label>
-              <p style={{ fontSize: '0.8125rem', color: '#64748b', margin: '0.125rem 0 0 0' }}>
+              <p
+                style={{
+                  fontSize: '0.8125rem',
+                  color: 'var(--text-muted)',
+                  margin: '0.125rem 0 0 0',
+                }}
+              >
                 Default is OFF. If enabled, questions are stripped of PII and used strictly for open
                 Java curriculum quality evaluations.
               </p>
@@ -321,8 +373,8 @@ export function SettingsView({ initialSettings, csrfToken = '' }: SettingsViewPr
             fontSize: '0.875rem',
             fontWeight: 600,
             borderRadius: '0.375rem',
-            backgroundColor: '#2563eb',
-            color: '#ffffff',
+            backgroundColor: 'var(--action-primary-bg)',
+            color: 'var(--action-primary-text)',
             border: 'none',
             cursor: isSaving ? 'not-allowed' : 'pointer',
             opacity: isSaving ? 0.7 : 1,
@@ -335,10 +387,10 @@ export function SettingsView({ initialSettings, csrfToken = '' }: SettingsViewPr
       {/* Data Export & Privacy Section */}
       <section
         style={{
-          backgroundColor: '#ffffff',
+          backgroundColor: 'var(--bg-surface)',
           padding: '1.5rem',
           borderRadius: '0.5rem',
-          border: '1px solid #e2e8f0',
+          border: '1px solid var(--border-subtle)',
           display: 'flex',
           flexDirection: 'column',
           gap: '1rem',
@@ -347,11 +399,11 @@ export function SettingsView({ initialSettings, csrfToken = '' }: SettingsViewPr
       >
         <h2
           id="privacy-heading"
-          style={{ fontSize: '1.125rem', fontWeight: 600, color: '#0f172a', margin: 0 }}
+          style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}
         >
           Privacy, Export & Account Deletion
         </h2>
-        <p style={{ fontSize: '0.875rem', color: '#475569', margin: 0 }}>
+        <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', margin: 0 }}>
           You own your learning data. You can download a complete JSON archive of all chats,
           messages, submissions, progress, and bookmarks at any time.
         </p>
@@ -366,9 +418,9 @@ export function SettingsView({ initialSettings, csrfToken = '' }: SettingsViewPr
             fontSize: '0.875rem',
             fontWeight: 600,
             borderRadius: '0.375rem',
-            border: '1px solid #cbd5e1',
-            backgroundColor: '#f8fafc',
-            color: '#334155',
+            border: '1px solid var(--border-subtle)',
+            backgroundColor: 'var(--bg-surface-subtle)',
+            color: 'var(--text-primary)',
             cursor: isExporting ? 'not-allowed' : 'pointer',
           }}
         >

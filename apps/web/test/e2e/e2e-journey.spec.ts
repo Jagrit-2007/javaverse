@@ -1,13 +1,18 @@
 import { test, expect } from '@playwright/test';
+import { authenticateAsLearner } from './helpers/auth';
 
 test.describe('Phase 11: End-to-End Complete Learner Journey', () => {
   test('full end-to-end user journey across marketing, learning, practice, and progress', async ({
     page,
+    context,
   }) => {
     // 1. Landing Page
     await page.goto('/');
     await expect(page.locator('h1')).toBeVisible();
     await expect(page.locator('text=JavaVerse').first()).toBeVisible();
+
+    // Authenticate learner to enter dashboard learning journey
+    await authenticateAsLearner(context);
 
     // 2. Explore Curriculum
     await page.goto('/dashboard/learn');
@@ -53,8 +58,10 @@ test.describe('Phase 11: End-to-End Complete Learner Journey', () => {
     await page.goto('/dashboard/progress');
     await expect(page.locator('h1')).toContainText('Your Learning Journey & Progress');
     await expect(page.locator('#topic-mastery-heading')).toBeVisible();
-    await expect(page.getByText('CORE JAVA', { exact: true })).toBeVisible();
-    await expect(page.getByText('OOP', { exact: true })).toBeVisible();
+    await expect(page.getByText('Core Java', { exact: false }).first()).toBeVisible();
+    await expect(
+      page.getByText('Object-Oriented Programming', { exact: false }).first(),
+    ).toBeVisible();
     await expect(page.locator('#badges-shelf-heading')).toBeVisible();
 
     // 6. Library Bookmarks & Notes

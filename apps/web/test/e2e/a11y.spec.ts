@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { authenticateAsLearner } from './helpers/auth';
 
 const ALL_ROUTES = [
   '/',
@@ -9,10 +10,9 @@ const ALL_ROUTES = [
   '/terms',
   '/contact',
   '/auth/login',
-  '/auth/bootstrap',
+  '/auth/signup',
   '/auth/mfa',
   '/auth/recovery',
-  '/auth/invite',
   '/auth/forgot-password',
   '/auth/reset-password',
   '/auth/verify-email',
@@ -28,10 +28,12 @@ const ALL_ROUTES = [
   '/dashboard/notes',
   '/dashboard/settings',
   '/dashboard/settings/security',
-  '/dashboard/admin',
 ];
 
 test.describe('Automated Accessibility Scans (@axe-core/playwright)', () => {
+  test.beforeEach(async ({ context }) => {
+    await authenticateAsLearner(context);
+  });
   for (const route of ALL_ROUTES) {
     test(`route ${route} has zero axe-core WCAG 2.2 AA violations`, async ({ page }) => {
       await page.goto(route);
@@ -54,6 +56,9 @@ test.describe('Automated Accessibility Scans (@axe-core/playwright)', () => {
 });
 
 test.describe('Dialog Accessibility & Keyboard Interactions', () => {
+  test.beforeEach(async ({ context }) => {
+    await authenticateAsLearner(context);
+  });
   test('dashboard daily challenge hints modal behaves correctly', async ({ page }) => {
     await page.goto('/dashboard');
 
@@ -115,6 +120,9 @@ test.describe('Dialog Accessibility & Keyboard Interactions', () => {
 });
 
 test.describe('Reflow, Visible Focus, Reduced Motion & Theme Behavior', () => {
+  test.beforeEach(async ({ context }) => {
+    await authenticateAsLearner(context);
+  });
   test('natural 320 CSS pixel reflow on / and /dashboard without horizontal scroll', async ({
     page,
   }) => {
@@ -146,13 +154,14 @@ test.describe('Reflow, Visible Focus, Reduced Motion & Theme Behavior', () => {
 
   test('theme selection switches attributes correctly without flash', async ({ page }) => {
     await page.goto('/dashboard');
+    await page.waitForLoadState('networkidle');
 
     // Default theme is light
     const htmlThemeInitial = await page.getAttribute('html', 'data-theme');
     expect(htmlThemeInitial).toBe('light');
 
     // Select Dark
-    const themeSelect = page.locator('header select[aria-label="Select color theme"]');
+    const themeSelect = page.locator('header select[aria-label="Select color theme"]').first();
     await themeSelect.selectOption('dark');
 
     const htmlThemeDark = await page.getAttribute('html', 'data-theme');

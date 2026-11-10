@@ -9,28 +9,35 @@ export const displayNameSchema = z
     'Display name must not contain control characters',
   );
 
+export const passwordWhitespaceRegex = /^\s|\s$/;
+
+export const passwordSchema = z
+  .string()
+  .min(12, 'Password must be at least 12 characters')
+  .max(128, 'Password must not exceed 128 characters')
+  .refine(
+    (val) => !passwordWhitespaceRegex.test(val),
+    'Password cannot begin or end with whitespace.',
+  );
+
 export const loginSchema = z.object({
   email: z.string().trim().email('Invalid email address').max(254),
   password: z.string().min(1, 'Password is required').max(128),
 });
 
-export const bootstrapValidateSchema = z.object({
-  token: z.string().min(1, 'Bootstrap token is required'),
-});
+export const signupSchema = z
+  .object({
+    displayName: displayNameSchema.optional().or(z.literal('')),
+    email: z.string().trim().email('Invalid email address').max(254),
+    password: passwordSchema,
+    confirmPassword: z.string().min(1, 'Password confirmation is required'),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: 'Passwords do not match',
+    path: ['confirmPassword'],
+  });
 
-export const bootstrapFinalizeSchema = z.object({
-  ticketId: z.string().min(1, 'Enrollment ticket ID is required'),
-  email: z.string().trim().email('Invalid email address').max(254),
-  password: z
-    .string()
-    .min(12, 'Password must be at least 12 characters')
-    .max(128, 'Password must not exceed 128 characters'),
-  displayName: displayNameSchema.optional(),
-  totpCode: z
-    .string()
-    .trim()
-    .regex(/^\d{6}$/, 'TOTP code must be 6 digits'),
-});
+export type SignupInput = z.infer<typeof signupSchema>;
 
 export const mfaChallengeSchema = z.object({
   code: z
@@ -49,18 +56,12 @@ export const forgotPasswordSchema = z.object({
 
 export const resetPasswordSchema = z.object({
   token: z.string().min(1, 'Reset token is required'),
-  password: z
-    .string()
-    .min(12, 'Password must be at least 12 characters')
-    .max(128, 'Password must not exceed 128 characters'),
+  password: passwordSchema,
 });
 
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, 'Current password is required'),
-  newPassword: z
-    .string()
-    .min(12, 'New password must be at least 12 characters')
-    .max(128, 'New password must not exceed 128 characters'),
+  newPassword: passwordSchema,
 });
 
 export const createInvitationSchema = z.object({
@@ -71,10 +72,7 @@ export const createInvitationSchema = z.object({
 export const acceptInvitationSchema = z.object({
   token: z.string().min(1, 'Invitation token is required'),
   displayName: displayNameSchema.optional(),
-  password: z
-    .string()
-    .min(12, 'Password must be at least 12 characters')
-    .max(128, 'Password must not exceed 128 characters'),
+  password: passwordSchema,
 });
 
 export const verifyEmailSchema = z.object({

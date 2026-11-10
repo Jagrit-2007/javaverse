@@ -16,7 +16,6 @@ export async function GET(request: NextRequest) {
     user: {
       id: sessionCtx.user.id,
       email: sessionCtx.user.email,
-      role: sessionCtx.user.role,
       displayName: getSafeDisplayName(sessionCtx.user),
       emailVerified: sessionCtx.user.emailVerifiedAt !== null,
       mfaVerified: sessionCtx.session.mfaVerifiedAt !== null,

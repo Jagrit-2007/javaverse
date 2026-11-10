@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { prisma } from '@javaverse/db';
+import { prisma, assertSafeTestDatabase } from '@javaverse/db';
 import {
   createChatInFirstFreeSlot,
   listUserChats,
@@ -17,6 +17,7 @@ describe('Phase 4: Chat Slots & Concurrency Invariants', () => {
   let user2Id: string;
 
   beforeEach(async () => {
+    assertSafeTestDatabase(process.env.DATABASE_URL);
     // Clean test state
     await prisma.userStreamEvent.deleteMany();
     await prisma.durableJob.deleteMany();
@@ -30,7 +31,6 @@ describe('Phase 4: Chat Slots & Concurrency Invariants', () => {
     const u1 = await prisma.user.create({
       data: {
         email: 'learner1@example.com',
-        role: 'MEMBER',
         status: 'ACTIVE',
       },
     });
@@ -39,7 +39,6 @@ describe('Phase 4: Chat Slots & Concurrency Invariants', () => {
     const u2 = await prisma.user.create({
       data: {
         email: 'learner2@example.com',
-        role: 'MEMBER',
         status: 'ACTIVE',
       },
     });

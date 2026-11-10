@@ -95,7 +95,6 @@ export async function POST(request: NextRequest) {
       action: 'auth.password_reset_requested',
       actorType: 'USER',
       actorUserId: user.id,
-      actorRoleAtTime: user.role,
       targetUserId: user.id,
       clientIp,
     });

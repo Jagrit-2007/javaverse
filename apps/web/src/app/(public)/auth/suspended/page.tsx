@@ -10,16 +10,20 @@ export default function SuspendedAccountPage() {
     try {
       const csrfRes = await fetch('/api/v1/auth/csrf');
       const csrfData = await csrfRes.json();
-      await fetch('/api/v1/auth/logout', {
+      const res = await fetch('/api/v1/auth/logout', {
         method: 'POST',
         headers: {
           'x-csrf-token': csrfData?.data?.csrfToken || '',
         },
       });
+      if (res.ok) {
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem('external_ai_consent');
+        }
+        window.location.href = '/auth/login';
+      }
     } catch {
-      // Proceed with redirection
-    } finally {
-      window.location.href = '/auth/login';
+      // Do not navigate away if logout fails
     }
   };
 

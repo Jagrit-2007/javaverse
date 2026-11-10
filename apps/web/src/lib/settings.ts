@@ -18,7 +18,6 @@ export async function getUserSettings(userId: string): Promise<UserSettings | nu
   return {
     displayName: user.displayName,
     email: user.email,
-    role: user.role,
     theme: (user.theme as 'light' | 'dark' | 'system') || 'system',
     defaultJavaVersion: user.defaultJavaVersion || '21',
     consentImprove: user.consentImprove,
@@ -75,7 +74,6 @@ export async function updateUserSettings(
   return {
     displayName: refreshedUser.displayName,
     email: refreshedUser.email,
-    role: refreshedUser.role,
     theme: (refreshedUser.theme as 'light' | 'dark' | 'system') || 'system',
     defaultJavaVersion: refreshedUser.defaultJavaVersion || '21',
     consentImprove: refreshedUser.consentImprove,
@@ -93,7 +91,6 @@ export async function generateUserDataExport(userId: string): Promise<Record<str
       id: true,
       email: true,
       displayName: true,
-      role: true,
       consentImprove: true,
       theme: true,
       defaultJavaVersion: true,

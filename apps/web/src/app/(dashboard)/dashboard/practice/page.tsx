@@ -1,6 +1,6 @@
 import React from 'react';
 import { cookies } from 'next/headers';
-import { resolveSession, SESSION_COOKIE_NAME } from '@/lib/auth';
+import { resolveSession, getSessionTokenFromCookies } from '@/lib/auth';
 import { getPracticeProblemsList } from '@/lib/practice';
 import { PracticeCatalog } from './PracticeCatalog';
 
@@ -11,7 +11,7 @@ export const metadata = {
 
 export default async function PracticePage() {
   const cookieStore = await cookies();
-  const sessionToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  const sessionToken = getSessionTokenFromCookies(cookieStore);
   let userId: string | undefined;
 
   if (sessionToken) {

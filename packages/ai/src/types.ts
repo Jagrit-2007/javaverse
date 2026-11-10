@@ -16,11 +16,21 @@ export interface AnalysisRequest {
   correlationId?: string;
 }
 
+export interface TokenUsage {
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+}
+
 export interface AnalysisResponse {
+  providerId: 'mock' | 'anthropic' | 'gemini';
   modelId: string;
   promptVersion: string;
   result: PedagogicalAnalysis;
   rawResponse?: string;
+  usage?: TokenUsage | null;
+  fallbackUsed?: boolean;
+  fallbackReason?: string;
 }
 
 export interface AIProvider {

@@ -2,7 +2,7 @@ import React from 'react';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { prisma } from '@javaverse/db';
-import { resolveSession, SESSION_COOKIE_NAME } from '@/lib/auth';
+import { resolveSession, getSessionTokenFromCookies } from '@/lib/auth';
 import { createCsrfToken } from '@/lib/csrf';
 import { getLibraryItems } from '@/lib/library';
 import { LibraryView } from './LibraryView';
@@ -14,7 +14,7 @@ export const metadata = {
 
 export default async function LibraryPage() {
   const cookieStore = await cookies();
-  const sessionToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  const sessionToken = getSessionTokenFromCookies(cookieStore);
 
   let userId: string | null = null;
   let csrfToken = '';
@@ -34,7 +34,6 @@ export default async function LibraryPage() {
         data: {
           email: 'demo@javaverse.local',
           displayName: 'Demo User',
-          role: 'MEMBER',
           status: 'ACTIVE',
         },
       });

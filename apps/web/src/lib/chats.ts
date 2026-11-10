@@ -25,6 +25,14 @@ export class ChatNotFoundError extends Error {
   }
 }
 
+export class ActiveJobInProgressError extends Error {
+  code = 'ACTIVE_JOB_IN_PROGRESS';
+  constructor(message = 'A question analysis is already in progress for this slot.') {
+    super(message);
+    this.name = 'ActiveJobInProgressError';
+  }
+}
+
 export interface ChatWithBadge extends Chat {
   badgeStatus: 'idle' | 'working' | 'ready';
   latestMessage?: Message | null;
@@ -299,6 +307,22 @@ export async function postUserMessage(params: {
 
   // 2. Transactionally create messages, job, and initial stream event
   const result = await prisma.$transaction(async (tx) => {
+    // Acquire advisory lock on the chat to prevent concurrent duplicate submissions
+    const lockId = hashToLockId(`chat_post_${chatId}`);
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lockId})`;
+
+    // Check if there is an active job currently pending or running for this chat
+    const activeJob = await tx.durableJob.findFirst({
+      where: {
+        chatId,
+        status: { in: ['PENDING', 'RUNNING'] },
+      },
+    });
+
+    if (activeJob) {
+      throw new ActiveJobInProgressError();
+    }
+
     // Auto-update chat title from first question if default
     if (chat.title.startsWith('New Question') || chat.title.startsWith('Question in Slot')) {
       const cleanSnippet = content.trim().slice(0, 40).replace(/\n/g, ' ');

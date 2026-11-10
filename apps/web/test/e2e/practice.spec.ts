@@ -1,6 +1,10 @@
 import { test, expect } from '@playwright/test';
+import { authenticateAsLearner } from './helpers/auth';
 
 test.describe('Phase 9: Practice, Progress, Library & Settings User Journeys', () => {
+  test.beforeEach(async ({ context }) => {
+    await authenticateAsLearner(context);
+  });
   test('practice catalog displays problems and allows topic filtering', async ({ page }) => {
     await page.goto('/dashboard/practice');
 
@@ -49,10 +53,14 @@ test.describe('Phase 9: Practice, Progress, Library & Settings User Journeys', (
 
     // Topic mastery heading
     await expect(page.locator('#topic-mastery-heading')).toBeVisible();
-    await expect(page.getByText('CORE JAVA', { exact: true })).toBeVisible();
-    await expect(page.getByText('OOP', { exact: true })).toBeVisible();
-    await expect(page.getByText('DSA', { exact: true })).toBeVisible();
-    await expect(page.getByText('ADVANCED JAVA', { exact: true })).toBeVisible();
+    await expect(page.getByText('Core Java', { exact: false }).first()).toBeVisible();
+    await expect(
+      page.getByText('Object-Oriented Programming', { exact: false }).first(),
+    ).toBeVisible();
+    await expect(
+      page.getByText('Data Structures & Algorithms', { exact: false }).first(),
+    ).toBeVisible();
+    await expect(page.getByText('Advanced Java', { exact: false }).first()).toBeVisible();
 
     // Badges heading
     await expect(page.locator('#badges-shelf-heading')).toBeVisible();

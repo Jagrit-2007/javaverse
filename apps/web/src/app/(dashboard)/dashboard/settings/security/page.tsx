@@ -14,18 +14,8 @@ interface SessionItem {
   isCurrent: boolean;
 }
 
-interface InvitationItem {
-  id: string;
-  email: string;
-  role: string;
-  status: string;
-  expiresAt: string;
-}
-
 export default function SecuritySettingsPage() {
   const [sessions, setSessions] = useState<SessionItem[]>([]);
-  const [invitations, setInvitations] = useState<InvitationItem[]>([]);
-  const [isOwner, setIsOwner] = useState(false);
   const [csrfToken, setCsrfToken] = useState('');
 
   // Password change state
@@ -42,40 +32,12 @@ export default function SecuritySettingsPage() {
   const [showReauthModal, setShowReauthModal] = useState(false);
   const [pendingAction, setPendingAction] = useState<(() => Promise<void>) | null>(null);
 
-  // Invite state
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteMsg, setInviteMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(
-    null,
-  );
-  const [inviteSubmitting, setInviteSubmitting] = useState(false);
-
-  const fetchSessionInfo = async () => {
-    try {
-      const res = await fetch('/api/v1/auth/session');
-      const data = await res.json();
-      if (data?.data?.user?.role === 'OWNER') {
-        setIsOwner(true);
-        loadInvitations();
-      }
-    } catch {}
-  };
-
   const loadSessions = async () => {
     try {
       const res = await fetch('/api/v1/auth/sessions');
       const data = await res.json();
       if (data?.data?.sessions) {
         setSessions(data.data.sessions);
-      }
-    } catch {}
-  };
-
-  const loadInvitations = async () => {
-    try {
-      const res = await fetch('/api/v1/invitations');
-      const data = await res.json();
-      if (data?.data?.invitations) {
-        setInvitations(data.data.invitations);
       }
     } catch {}
   };
@@ -92,7 +54,6 @@ export default function SecuritySettingsPage() {
 
   useEffect(() => {
     refreshCsrf();
-    fetchSessionInfo();
     loadSessions();
   }, []);
 
@@ -152,7 +113,12 @@ export default function SecuritySettingsPage() {
         setShowReauthModal(true);
         return;
       }
-      window.location.href = '/auth/login';
+      if (res.ok) {
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem('external_ai_consent');
+        }
+        window.location.href = '/auth/login';
+      }
     };
     await action();
   };
@@ -201,67 +167,12 @@ export default function SecuritySettingsPage() {
     }
   };
 
-  const handleCreateInvite = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setInviteMsg(null);
-    setInviteSubmitting(true);
-
-    try {
-      const res = await fetch('/api/v1/invitations', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-csrf-token': csrfToken,
-        },
-        body: JSON.stringify({ email: inviteEmail.trim() }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        setInviteMsg({ type: 'error', text: data?.error?.message || 'Failed to send invitation' });
-        return;
-      }
-
-      setInviteMsg({ type: 'success', text: `Invitation sent to ${inviteEmail}!` });
-      setInviteEmail('');
-      loadInvitations();
-    } catch {
-      setInviteMsg({ type: 'error', text: 'Failed to create invitation.' });
-    } finally {
-      setInviteSubmitting(false);
-    }
-  };
-
-  const handleRevokeInvite = async (id: string) => {
-    try {
-      await fetch(`/api/v1/invitations/${id}`, {
-        method: 'DELETE',
-        headers: { 'x-csrf-token': csrfToken },
-      });
-      loadInvitations();
-    } catch {}
-  };
-
-  const handleResendInvite = async (id: string) => {
-    try {
-      await fetch('/api/v1/invitations/resend', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-csrf-token': csrfToken,
-        },
-        body: JSON.stringify({ invitationId: id }),
-      });
-      loadInvitations();
-    } catch {}
-  };
-
   return (
     <div className={styles.container}>
       <header className={styles.header}>
         <h1 className={styles.title}>Account Security &amp; Sessions</h1>
         <p className={styles.subtitle}>
-          Manage active login sessions, credentials, and workspace memberships.
+          Manage active login sessions and update your account password.
         </p>
       </header>
 
@@ -415,103 +326,6 @@ export default function SecuritySettingsPage() {
           </Button>
         </form>
       </section>
-
-      {/* Workspace Member Invitations (Owner Only) */}
-      {isOwner && (
-        <section aria-labelledby="invitations-heading" className={styles.section}>
-          <h2 id="invitations-heading" className={styles.sectionTitle}>
-            Workspace Learner Invitations
-          </h2>
-          <p className={styles.sectionSubtitle}>
-            Invite new learners to your private JavaVerse workspace. Each active invitation reserves
-            one seat.
-          </p>
-
-          {inviteMsg && (
-            <div
-              role="alert"
-              style={{
-                padding: '0.75rem 1rem',
-                borderRadius: 'var(--radius-md)',
-                marginBottom: '1rem',
-                fontSize: 'var(--text-sm)',
-                backgroundColor:
-                  inviteMsg.type === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)',
-                color: inviteMsg.type === 'error' ? '#ef4444' : '#22c55e',
-              }}
-            >
-              {inviteMsg.text}
-            </div>
-          )}
-
-          <form
-            onSubmit={handleCreateInvite}
-            style={{ display: 'flex', gap: '0.5rem', maxWidth: '520px', marginBottom: '1.5rem' }}
-          >
-            <div style={{ flex: 1 }}>
-              <Input
-                id="invite-email"
-                type="email"
-                label="Learner Email"
-                hideLabel
-                placeholder="learner@example.com"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                required
-                disabled={inviteSubmitting}
-              />
-            </div>
-            <Button type="submit" variant="primary" disabled={inviteSubmitting}>
-              {inviteSubmitting ? 'Sending...' : 'Invite'}
-            </Button>
-          </form>
-
-          <div className={styles.invitationList}>
-            {invitations.length === 0 ? (
-              <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
-                No pending invitations.
-              </p>
-            ) : (
-              invitations.map((inv) => (
-                <Card key={inv.id} padding="md" className={styles.sessionCard}>
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                    }}
-                  >
-                    <div>
-                      <span style={{ fontWeight: 600 }}>{inv.email}</span>
-                      <div
-                        style={{
-                          fontSize: 'var(--text-xs)',
-                          color: 'var(--text-muted)',
-                          marginTop: '0.25rem',
-                        }}
-                      >
-                        Role: {inv.role} · Expires: {new Date(inv.expiresAt).toLocaleDateString()}
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => handleResendInvite(inv.id)}
-                      >
-                        Resend
-                      </Button>
-                      <Button variant="danger" size="sm" onClick={() => handleRevokeInvite(inv.id)}>
-                        Revoke
-                      </Button>
-                    </div>
-                  </div>
-                </Card>
-              ))
-            )}
-          </div>
-        </section>
-      )}
     </div>
   );
 }

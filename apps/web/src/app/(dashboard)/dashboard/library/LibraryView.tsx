@@ -11,21 +11,20 @@ interface LibraryViewProps {
 
 export function LibraryView({ initialItems, csrfToken = '' }: LibraryViewProps) {
   const [items, setItems] = useState<LibraryItem[]>(initialItems);
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState<string>('ALL');
 
-  // Extract all unique tags
-  const allTags = Array.from(new Set(items.flatMap((i) => i.tags)));
+  const allTags = Array.from(new Set(items.flatMap((item) => item.tags)));
 
-  const filteredItems = items.filter((i) => {
-    if (selectedTag !== 'ALL' && !i.tags.includes(selectedTag)) return false;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchTitle = i.title.toLowerCase().includes(q);
-      const matchNotes = i.notes?.toLowerCase().includes(q) ?? false;
-      if (!matchTitle && !matchNotes) return false;
-    }
-    return true;
+  const filteredItems = items.filter((item) => {
+    const matchesSearch =
+      searchQuery.trim().length === 0 ||
+      item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (item.notes && item.notes.toLowerCase().includes(searchQuery.toLowerCase()));
+
+    const matchesTag = selectedTag === 'ALL' || item.tags.includes(selectedTag);
+
+    return matchesSearch && matchesTag;
   });
 
   async function handleRemove(id: string) {
@@ -37,20 +36,30 @@ export function LibraryView({ initialItems, csrfToken = '' }: LibraryViewProps) 
         },
       });
       if (res.ok) {
-        setItems(items.filter((i) => i.id !== id));
+        setItems((prev) => prev.filter((item) => item.id !== id));
       }
     } catch {
-      // Failed to delete
+      // Ignore network errors in optimistic UI
     }
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%' }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '2rem',
+        maxWidth: '1200px',
+        width: '100%',
+      }}
+    >
       <header>
-        <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
+        <h1
+          style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}
+        >
           Your Library & Bookmarks
         </h1>
-        <p style={{ fontSize: '1rem', color: '#475569', margin: '0.25rem 0 0 0' }}>
+        <p style={{ fontSize: '1rem', color: 'var(--text-secondary)', margin: '0.25rem 0 0 0' }}>
           Quickly access saved analyses, lessons, and practice problems with private notes.
         </p>
       </header>
@@ -61,10 +70,10 @@ export function LibraryView({ initialItems, csrfToken = '' }: LibraryViewProps) 
           gap: '1rem',
           flexWrap: 'wrap',
           alignItems: 'center',
-          backgroundColor: '#ffffff',
+          backgroundColor: 'var(--bg-surface)',
           padding: '1rem',
           borderRadius: '0.5rem',
-          border: '1px solid #e2e8f0',
+          border: '1px solid var(--border-subtle)',
         }}
         aria-label="Library search and filters"
       >
@@ -76,8 +85,10 @@ export function LibraryView({ initialItems, csrfToken = '' }: LibraryViewProps) 
           style={{
             padding: '0.375rem 0.75rem',
             fontSize: '0.875rem',
-            border: '1px solid #cbd5e1',
+            border: '1px solid var(--border-strong)',
             borderRadius: '0.375rem',
+            backgroundColor: 'var(--bg-surface)',
+            color: 'var(--text-primary)',
             minWidth: '240px',
           }}
           aria-label="Search library by title or notes"
@@ -85,7 +96,9 @@ export function LibraryView({ initialItems, csrfToken = '' }: LibraryViewProps) 
 
         {allTags.length > 0 && (
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#475569' }}>Tag:</span>
+            <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+              Tag:
+            </span>
             <button
               type="button"
               onClick={() => setSelectedTag('ALL')}
@@ -93,9 +106,11 @@ export function LibraryView({ initialItems, csrfToken = '' }: LibraryViewProps) 
                 padding: '0.25rem 0.5rem',
                 fontSize: '0.75rem',
                 borderRadius: '0.25rem',
-                border: '1px solid #cbd5e1',
-                backgroundColor: selectedTag === 'ALL' ? '#2563eb' : '#ffffff',
-                color: selectedTag === 'ALL' ? '#ffffff' : '#334155',
+                border: '1px solid var(--border-subtle)',
+                backgroundColor:
+                  selectedTag === 'ALL' ? 'var(--action-primary-bg)' : 'var(--bg-surface)',
+                color:
+                  selectedTag === 'ALL' ? 'var(--action-primary-text)' : 'var(--text-secondary)',
                 cursor: 'pointer',
               }}
             >
@@ -110,9 +125,11 @@ export function LibraryView({ initialItems, csrfToken = '' }: LibraryViewProps) 
                   padding: '0.25rem 0.5rem',
                   fontSize: '0.75rem',
                   borderRadius: '0.25rem',
-                  border: '1px solid #cbd5e1',
-                  backgroundColor: selectedTag === tag ? '#2563eb' : '#ffffff',
-                  color: selectedTag === tag ? '#ffffff' : '#334155',
+                  border: '1px solid var(--border-subtle)',
+                  backgroundColor:
+                    selectedTag === tag ? 'var(--action-primary-bg)' : 'var(--bg-surface)',
+                  color:
+                    selectedTag === tag ? 'var(--action-primary-text)' : 'var(--text-secondary)',
                   cursor: 'pointer',
                 }}
               >
@@ -135,11 +152,11 @@ export function LibraryView({ initialItems, csrfToken = '' }: LibraryViewProps) 
           <div
             style={{
               padding: '2rem',
-              backgroundColor: '#ffffff',
+              backgroundColor: 'var(--bg-surface)',
               borderRadius: '0.5rem',
-              border: '1px solid #e2e8f0',
+              border: '1px solid var(--border-subtle)',
               textAlign: 'center',
-              color: '#64748b',
+              color: 'var(--text-muted)',
               gridColumn: '1 / -1',
             }}
           >
@@ -159,14 +176,14 @@ export function LibraryView({ initialItems, csrfToken = '' }: LibraryViewProps) 
               <article
                 key={item.id}
                 style={{
-                  backgroundColor: '#ffffff',
-                  border: '1px solid #e2e8f0',
+                  backgroundColor: 'var(--bg-surface)',
+                  border: '1px solid var(--border-subtle)',
                   borderRadius: '0.5rem',
                   padding: '1.25rem',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '0.75rem',
-                  boxShadow: '0 1px 2px 0 rgba(0,0,0,0.05)',
+                  boxShadow: 'var(--elevation-low)',
                 }}
               >
                 <div
@@ -178,8 +195,8 @@ export function LibraryView({ initialItems, csrfToken = '' }: LibraryViewProps) 
                       fontWeight: 700,
                       padding: '0.125rem 0.5rem',
                       borderRadius: '9999px',
-                      backgroundColor: '#eff6ff',
-                      color: '#1d4ed8',
+                      backgroundColor: 'var(--status-info-bg)',
+                      color: 'var(--status-info-text)',
                       textTransform: 'uppercase',
                     }}
                   >
@@ -192,7 +209,7 @@ export function LibraryView({ initialItems, csrfToken = '' }: LibraryViewProps) 
                       background: 'none',
                       border: 'none',
                       fontSize: '0.75rem',
-                      color: '#b91c1c',
+                      color: 'var(--status-danger-text)',
                       cursor: 'pointer',
                       padding: 0,
                     }}
@@ -202,8 +219,18 @@ export function LibraryView({ initialItems, csrfToken = '' }: LibraryViewProps) 
                   </button>
                 </div>
 
-                <h2 style={{ fontSize: '1.125rem', fontWeight: 600, color: '#0f172a', margin: 0 }}>
-                  <Link href={targetLink} style={{ color: '#0f172a', textDecoration: 'none' }}>
+                <h2
+                  style={{
+                    fontSize: '1.125rem',
+                    fontWeight: 600,
+                    color: 'var(--text-primary)',
+                    margin: 0,
+                  }}
+                >
+                  <Link
+                    href={targetLink}
+                    style={{ color: 'var(--text-primary)', textDecoration: 'none' }}
+                  >
                     {item.title}
                   </Link>
                 </h2>
@@ -212,7 +239,7 @@ export function LibraryView({ initialItems, csrfToken = '' }: LibraryViewProps) 
                   <p
                     style={{
                       fontSize: '0.875rem',
-                      color: '#475569',
+                      color: 'var(--text-secondary)',
                       margin: 0,
                       fontStyle: 'italic',
                     }}
@@ -223,13 +250,13 @@ export function LibraryView({ initialItems, csrfToken = '' }: LibraryViewProps) 
 
                 {item.tags.length > 0 && (
                   <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
-                    {item.tags.map((t) => (
+                    {item.tags.map((t: string) => (
                       <span
                         key={t}
                         style={{
                           fontSize: '0.6875rem',
-                          backgroundColor: '#f1f5f9',
-                          color: '#475569',
+                          backgroundColor: 'var(--bg-surface-subtle)',
+                          color: 'var(--text-secondary)',
                           padding: '0.125rem 0.375rem',
                           borderRadius: '0.25rem',
                         }}

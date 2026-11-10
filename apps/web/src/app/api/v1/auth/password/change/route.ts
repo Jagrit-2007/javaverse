@@ -85,7 +85,6 @@ export async function POST(request: NextRequest) {
       action: 'auth.password_changed',
       actorType: 'USER',
       actorUserId: sessionCtx.user.id,
-      actorRoleAtTime: sessionCtx.user.role,
       targetUserId: sessionCtx.user.id,
       tx,
     });

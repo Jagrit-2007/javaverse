@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { prisma } from '@javaverse/db';
+import { prisma, assertSafeTestDatabase } from '@javaverse/db';
 import { generateCspNonce, scrubPii } from '@javaverse/security';
 import { awardPracticeProgressRewards } from '@/lib/progress';
 import { generateSessionTokens, createSessionRow } from '@/lib/auth';
 
 describe('Phase 11: Production Hardening & Operational Resilience', () => {
   beforeEach(async () => {
+    assertSafeTestDatabase(process.env.DATABASE_URL);
     // Reset test state cleanly
     await prisma.userProgress.deleteMany();
     await prisma.userReward.deleteMany();
@@ -36,10 +37,10 @@ describe('Phase 11: Production Hardening & Operational Resilience', () => {
   describe('Concurrent Session Revocation', () => {
     it('reliably revokes all sessions for a user concurrently without affecting other users', async () => {
       const userA = await prisma.user.create({
-        data: { email: 'learner-a@example.com', role: 'MEMBER', status: 'ACTIVE' },
+        data: { email: 'learner-a@example.com', status: 'ACTIVE' },
       });
       const userB = await prisma.user.create({
-        data: { email: 'learner-b@example.com', role: 'MEMBER', status: 'ACTIVE' },
+        data: { email: 'learner-b@example.com', status: 'ACTIVE' },
       });
 
       // Create 20 concurrent sessions for userA
@@ -83,7 +84,7 @@ describe('Phase 11: Production Hardening & Operational Resilience', () => {
   describe('Concurrent Challenge Completion & Reward Idempotency', () => {
     it('prevents double XP rewards and duplicate progress rows under 10 concurrent completions', async () => {
       const user = await prisma.user.create({
-        data: { email: 'reward-test@example.com', role: 'MEMBER', status: 'ACTIVE' },
+        data: { email: 'reward-test@example.com', status: 'ACTIVE' },
       });
 
       // Concurrently submit practice completion for the same problem 10 times

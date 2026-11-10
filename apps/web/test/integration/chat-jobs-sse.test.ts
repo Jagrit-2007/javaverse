@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { prisma } from '@javaverse/db';
+import { prisma, assertSafeTestDatabase } from '@javaverse/db';
 import {
   createChatInFirstFreeSlot,
   postUserMessage,
@@ -16,6 +16,7 @@ describe('Phase 4: Durable Jobs, Mock Worker & SSE Streaming', () => {
   let chatId: string;
 
   beforeEach(async () => {
+    assertSafeTestDatabase(process.env.DATABASE_URL);
     // Clean test state
     await prisma.userStreamEvent.deleteMany();
     await prisma.durableJob.deleteMany();
@@ -28,7 +29,6 @@ describe('Phase 4: Durable Jobs, Mock Worker & SSE Streaming', () => {
     const u = await prisma.user.create({
       data: {
         email: 'learner-jobs@example.com',
-        role: 'MEMBER',
         status: 'ACTIVE',
       },
     });

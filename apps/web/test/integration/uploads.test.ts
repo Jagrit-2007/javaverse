@@ -47,7 +47,6 @@ describe('Upload Quarantine & Media Security Integration', () => {
     const user = await prisma.user.create({
       data: {
         email: `upload-tester-${Math.random().toString(36).substring(2)}@example.com`,
-        role: 'MEMBER',
         status: 'ACTIVE',
       },
     });

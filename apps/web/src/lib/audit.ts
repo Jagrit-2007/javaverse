@@ -6,7 +6,6 @@ export interface AuditLogParams {
   actorType: 'USER' | 'SYSTEM' | 'ANONYMOUS';
   actorUserId?: string | null;
   targetUserId?: string | null;
-  actorRoleAtTime?: string | null;
   systemName?: string;
   anonymousId?: string;
   action: string;
@@ -46,7 +45,6 @@ export async function recordAuditEvent(params: AuditLogParams): Promise<void> {
         actorType: params.actorType,
         actorUserId: params.actorUserId || null,
         targetUserId: params.targetUserId || null,
-        actorRoleAtTime: params.actorRoleAtTime || null,
         actorPseudonym,
         action: params.action,
         targetMetadata: sanitized as Prisma.InputJsonValue,

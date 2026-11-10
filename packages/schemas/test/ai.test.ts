@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PedagogicalAnalysisSchema, AnalysisJobDataSchema } from '../src/ai';
+import { PedagogicalAnalysisSchema, AnalysisJobDataSchema, UsageMetadataSchema } from '../src/ai';
 
 describe('PedagogicalAnalysisSchema', () => {
   const validAnalysis = {
@@ -98,6 +98,74 @@ describe('PedagogicalAnalysisSchema', () => {
         correlationId: 'corr-12345',
       };
       expect(() => AnalysisJobDataSchema.parse(invalid)).toThrow();
+    });
+  });
+
+  describe('UsageMetadataSchema (Section 5)', () => {
+    it('validates non-negative integer token values', () => {
+      const valid = {
+        provider: 'gemini',
+        model: 'gemini-2.5-flash',
+        inputTokens: 120,
+        outputTokens: 450,
+        totalTokens: 570,
+      };
+      const parsed = UsageMetadataSchema.parse(valid);
+      expect(parsed.inputTokens).toBe(120);
+      expect(parsed.outputTokens).toBe(450);
+      expect(parsed.totalTokens).toBe(570);
+    });
+
+    it('validates nullable token values when provider does not report usage', () => {
+      const nullableUsage = {
+        provider: 'anthropic',
+        model: 'claude-3-5-sonnet-20241022',
+        inputTokens: null,
+        outputTokens: null,
+        totalTokens: null,
+      };
+      const parsed = UsageMetadataSchema.parse(nullableUsage);
+      expect(parsed.inputTokens).toBeNull();
+      expect(parsed.outputTokens).toBeNull();
+      expect(parsed.totalTokens).toBeNull();
+    });
+
+    it('validates mock synthetic zero tokens', () => {
+      const mockUsage = {
+        provider: 'mock',
+        model: 'mock-analyzer-v1',
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        isSynthetic: true,
+      };
+      const parsed = UsageMetadataSchema.parse(mockUsage);
+      expect(parsed.inputTokens).toBe(0);
+      expect(parsed.outputTokens).toBe(0);
+      expect(parsed.totalTokens).toBe(0);
+      expect(parsed.isSynthetic).toBe(true);
+    });
+
+    it('rejects negative token counts', () => {
+      const negative = {
+        provider: 'gemini',
+        model: 'gemini-2.5-flash',
+        inputTokens: -10,
+        outputTokens: 100,
+        totalTokens: 90,
+      };
+      expect(() => UsageMetadataSchema.parse(negative)).toThrow();
+    });
+
+    it('rejects fractional token counts', () => {
+      const fractional = {
+        provider: 'gemini',
+        model: 'gemini-2.5-flash',
+        inputTokens: 12.5,
+        outputTokens: 100,
+        totalTokens: 112.5,
+      };
+      expect(() => UsageMetadataSchema.parse(fractional)).toThrow();
     });
   });
 });

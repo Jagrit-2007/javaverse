@@ -202,7 +202,7 @@ export function PracticeWorkspace({ problem, csrfToken = '' }: PracticeWorkspace
                 style={{
                   fontSize: '1rem',
                   fontWeight: 600,
-                  color: '#0f172a',
+                  color: 'var(--text-primary)',
                   margin: '0 0 0.5rem 0',
                 }}
               >
@@ -315,7 +315,14 @@ export function PracticeWorkspace({ problem, csrfToken = '' }: PracticeWorkspace
 
           {testResults.length > 0 && (
             <div className={styles.resultsPanel}>
-              <h3 style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#0f172a', margin: 0 }}>
+              <h3
+                style={{
+                  fontSize: '0.9375rem',
+                  fontWeight: 600,
+                  color: 'var(--text-primary)',
+                  margin: 0,
+                }}
+              >
                 Test Case Breakdown
               </h3>
               <table className={styles.testsTable} aria-label="Test case outcomes table">

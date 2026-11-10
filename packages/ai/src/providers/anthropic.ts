@@ -6,6 +6,7 @@ export interface AnthropicProviderOptions {
   apiKey?: string | undefined;
   model?: string | undefined;
   timeoutMs?: number | undefined;
+  externalAiEnabled?: boolean | undefined;
 }
 
 export class AnthropicProvider implements AIProvider {
@@ -13,14 +14,20 @@ export class AnthropicProvider implements AIProvider {
   private readonly apiKey: string;
   private readonly model: string;
   private readonly timeoutMs: number;
+  private readonly externalAiEnabled: boolean;
 
   constructor(options?: AnthropicProviderOptions) {
-    this.apiKey = options?.apiKey || process.env.ANTHROPIC_API_KEY || '';
-    this.model = options?.model || 'claude-3-5-sonnet-20241022';
+    this.apiKey = options?.apiKey ?? process.env.ANTHROPIC_API_KEY ?? '';
+    this.model = options?.model || process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022';
     this.timeoutMs = options?.timeoutMs ?? 30000;
+    this.externalAiEnabled =
+      options?.externalAiEnabled ?? (process.env.EXTERNAL_AI_ENABLED === 'false' ? false : true);
   }
 
   async analyze(request: AnalysisRequest): Promise<AnalysisResponse> {
+    if (!this.externalAiEnabled) {
+      throw new Error('External AI is disabled in server configuration.');
+    }
     if (!this.apiKey) {
       throw new Error('ANTHROPIC_API_KEY is not configured.');
     }
@@ -72,8 +79,22 @@ export class AnthropicProvider implements AIProvider {
     }
 
     let parsedObj: unknown;
+    let usage: {
+      inputTokens: number | null;
+      outputTokens: number | null;
+      totalTokens: number | null;
+    } | null = null;
     try {
       const data = await res.json();
+      if (data?.usage) {
+        const inp = typeof data.usage.input_tokens === 'number' ? data.usage.input_tokens : null;
+        const out = typeof data.usage.output_tokens === 'number' ? data.usage.output_tokens : null;
+        usage = {
+          inputTokens: inp,
+          outputTokens: out,
+          totalTokens: inp !== null && out !== null ? inp + out : null,
+        };
+      }
       const contentBlock = data.content?.[0];
       const text = contentBlock?.text || '';
 
@@ -95,10 +116,12 @@ export class AnthropicProvider implements AIProvider {
     }
 
     return {
+      providerId: this.providerId,
       modelId: this.model,
       promptVersion: '1.0.0',
       result: parseResult.data,
       rawResponse: typeof parsedObj === 'object' ? JSON.stringify(parsedObj) : '',
+      usage,
     };
   }
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { prisma } from '@javaverse/db';
+import { prisma, assertSafeTestDatabase } from '@javaverse/db';
 import {
   generateSessionTokens,
   createSessionRow,
@@ -13,13 +13,13 @@ describe('Session Lifecycle, Idle Expiry & Touch Invariants', () => {
   let testUser: { id: string; email: string };
 
   beforeEach(async () => {
+    assertSafeTestDatabase(process.env.DATABASE_URL);
     await prisma.session.deleteMany();
     await prisma.user.deleteMany();
 
     testUser = await prisma.user.create({
       data: {
         email: 'session-test@example.com',
-        role: 'MEMBER',
         status: 'ACTIVE',
       },
     });

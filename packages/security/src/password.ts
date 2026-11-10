@@ -41,6 +41,9 @@ export function validatePasswordPolicy(password: string): { valid: boolean; reas
   if (typeof password !== 'string') {
     return { valid: false, reason: 'Password must be a string' };
   }
+  if (/^\s|\s$/.test(password)) {
+    return { valid: false, reason: 'Password cannot begin or end with whitespace.' };
+  }
   if (password.length < 12) {
     return { valid: false, reason: 'Password must be at least 12 characters long' };
   }

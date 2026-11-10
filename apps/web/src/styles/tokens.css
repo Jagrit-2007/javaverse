@@ -58,6 +58,15 @@
   --brand-primary: #0f172a;
   --brand-facet: #1e293b;
   --brand-amber: #b45309; /* 4.6:1 contrast on white, 4.5:1 on canvas */
+
+  /* Semantic Surface and UI Aliases */
+  --bg-surface-raised: var(--bg-surface-elevated);
+  --surface-raised: var(--bg-surface-elevated);
+  --surface-base: var(--bg-surface);
+  --card-bg: var(--bg-surface);
+  --card-border: var(--border-subtle);
+  --text-tertiary: var(--text-muted);
+  --brand-contrast: var(--action-primary-text);
 }
 
 [data-theme='dark'] {
@@ -109,6 +118,15 @@
   --brand-primary: #f8fafc;
   --brand-facet: #cbd5e1;
   --brand-amber: #f59e0b;
+
+  /* Semantic Surface and UI Aliases */
+  --bg-surface-raised: var(--bg-surface-elevated);
+  --surface-raised: var(--bg-surface-elevated);
+  --surface-base: var(--bg-surface);
+  --card-bg: var(--bg-surface);
+  --card-border: var(--border-subtle);
+  --text-tertiary: var(--text-muted);
+  --brand-contrast: var(--action-primary-text);
 }
 
 :root {

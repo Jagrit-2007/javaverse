@@ -12,20 +12,20 @@ describe('Token hashing & comparison', () => {
   const token = 'sample-random-token-value';
 
   it('generates consistent HMAC-SHA-256 hashes for same purpose and input', () => {
-    const hash1 = hashToken(token, secret, 'invitation');
-    const hash2 = hashToken(token, secret, 'invitation');
+    const hash1 = hashToken(token, secret, 'email_verification');
+    const hash2 = hashToken(token, secret, 'email_verification');
     expect(hash1).toBe(hash2);
     expect(hash1).toHaveLength(64);
   });
 
   it('produces different hashes across different purposes (domain separation)', () => {
-    const inviteHash = hashToken(token, secret, 'invitation');
+    const emailHash = hashToken(token, secret, 'email_verification');
     const resetHash = hashToken(token, secret, 'password_reset');
-    const bootstrapHash = hashToken(token, secret, 'owner_bootstrap');
+    const sessionHash = hashToken(token, secret, 'session');
 
-    expect(inviteHash).not.toBe(resetHash);
-    expect(inviteHash).not.toBe(bootstrapHash);
-    expect(resetHash).not.toBe(bootstrapHash);
+    expect(emailHash).not.toBe(resetHash);
+    expect(emailHash).not.toBe(sessionHash);
+    expect(resetHash).not.toBe(sessionHash);
   });
 
   it('generates random tokens of specified byte length', () => {

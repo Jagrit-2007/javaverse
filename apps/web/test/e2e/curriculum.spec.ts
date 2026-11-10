@@ -1,6 +1,10 @@
 import { test, expect } from '@playwright/test';
+import { authenticateAsLearner } from './helpers/auth';
 
 test.describe('Phase 8: Curriculum & Lessons User Journeys', () => {
+  test.beforeEach(async ({ context }) => {
+    await authenticateAsLearner(context);
+  });
   test('curriculum catalog displays 12 lessons and allows track filtering', async ({ page }) => {
     await page.goto('/dashboard/learn');
 

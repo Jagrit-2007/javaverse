@@ -202,9 +202,15 @@ public class Solution {
     const parsed = PedagogicalAnalysisSchema.parse(rawResult);
 
     return {
+      providerId: this.providerId,
       modelId: 'mock-analyzer-v1',
       promptVersion: '1.0.0',
       result: parsed,
+      usage: {
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+      },
     };
   }
 }

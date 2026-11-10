@@ -165,7 +165,6 @@ describe('Phase 8: Curriculum & Lessons Integration', () => {
       const user = await prisma.user.create({
         data: {
           email: `lesson-tester-${Math.random().toString(36).substring(2)}@example.com`,
-          role: 'MEMBER',
           status: 'ACTIVE',
         },
       });
@@ -209,7 +208,6 @@ describe('Phase 8: Curriculum & Lessons Integration', () => {
       const user = await prisma.user.create({
         data: {
           email: `quiz-grader-${Math.random().toString(36).substring(2)}@example.com`,
-          role: 'MEMBER',
           status: 'ACTIVE',
         },
       });
@@ -260,7 +258,6 @@ describe('Phase 8: Curriculum & Lessons Integration', () => {
       const user = await prisma.user.create({
         data: {
           email: `challenge-grader-${Math.random().toString(36).substring(2)}@example.com`,
-          role: 'MEMBER',
           status: 'ACTIVE',
         },
       });

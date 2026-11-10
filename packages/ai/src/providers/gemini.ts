@@ -6,6 +6,7 @@ export interface GeminiProviderOptions {
   apiKey?: string | undefined;
   model?: string | undefined;
   timeoutMs?: number | undefined;
+  externalAiEnabled?: boolean | undefined;
 }
 
 export class GeminiProvider implements AIProvider {
@@ -13,14 +14,20 @@ export class GeminiProvider implements AIProvider {
   private readonly apiKey: string;
   private readonly model: string;
   private readonly timeoutMs: number;
+  private readonly externalAiEnabled: boolean;
 
   constructor(options?: GeminiProviderOptions) {
-    this.apiKey = options?.apiKey || process.env.GEMINI_API_KEY || '';
-    this.model = options?.model || 'gemini-2.5-flash';
+    this.apiKey = options?.apiKey ?? process.env.GEMINI_API_KEY ?? '';
+    this.model = options?.model || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
     this.timeoutMs = options?.timeoutMs ?? 30000;
+    this.externalAiEnabled =
+      options?.externalAiEnabled ?? (process.env.EXTERNAL_AI_ENABLED === 'false' ? false : true);
   }
 
   async analyze(request: AnalysisRequest): Promise<AnalysisResponse> {
+    if (!this.externalAiEnabled) {
+      throw new Error('External AI is disabled in server configuration.');
+    }
     if (!this.apiKey) {
       throw new Error('GEMINI_API_KEY is not configured.');
     }
@@ -78,8 +85,29 @@ export class GeminiProvider implements AIProvider {
     }
 
     let parsedObj: unknown;
+    let usage: {
+      inputTokens: number | null;
+      outputTokens: number | null;
+      totalTokens: number | null;
+    } | null = null;
     try {
       const data = await res.json();
+      if (data?.usageMetadata) {
+        usage = {
+          inputTokens:
+            typeof data.usageMetadata.promptTokenCount === 'number'
+              ? data.usageMetadata.promptTokenCount
+              : null,
+          outputTokens:
+            typeof data.usageMetadata.candidatesTokenCount === 'number'
+              ? data.usageMetadata.candidatesTokenCount
+              : null,
+          totalTokens:
+            typeof data.usageMetadata.totalTokenCount === 'number'
+              ? data.usageMetadata.totalTokenCount
+              : null,
+        };
+      }
       const candidate = data.candidates?.[0];
       const text = candidate?.content?.parts?.[0]?.text || '';
 
@@ -100,10 +128,12 @@ export class GeminiProvider implements AIProvider {
     }
 
     return {
+      providerId: this.providerId,
       modelId: this.model,
       promptVersion: '1.0.0',
       result: parseResult.data,
       rawResponse: typeof parsedObj === 'object' ? JSON.stringify(parsedObj) : '',
+      usage,
     };
   }
 }

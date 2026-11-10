@@ -42,7 +42,6 @@ export async function DELETE(
       action: 'auth.logout',
       actorType: 'USER',
       actorUserId: sessionCtx.user.id,
-      actorRoleAtTime: sessionCtx.user.role,
       targetUserId: sessionCtx.user.id,
     });
 
@@ -77,7 +76,6 @@ export async function DELETE(
     action: 'auth.session_revoked',
     actorType: 'USER',
     actorUserId: sessionCtx.user.id,
-    actorRoleAtTime: sessionCtx.user.role,
     targetUserId: sessionCtx.user.id,
     metadata: { revoked_session_public_id: publicId },
   });
