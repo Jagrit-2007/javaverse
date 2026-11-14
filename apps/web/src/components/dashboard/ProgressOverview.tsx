@@ -9,7 +9,7 @@ interface ProgressOverviewProps {
   breakdowns?: ProgressBreakdown[];
 }
 
-export function ProgressOverview({ overallProgress = 35, breakdowns = [] }: ProgressOverviewProps) {
+export function ProgressOverview({ overallProgress = 0, breakdowns = [] }: ProgressOverviewProps) {
   return (
     <Card as="section" aria-labelledby="progress-heading" className={styles.container}>
       <div className={styles.header}>

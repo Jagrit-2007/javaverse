@@ -9,10 +9,11 @@ describe('ThemeScript Integrity & Hash Verification', () => {
     expect(`'sha256-${computedHash}'`).toBe(THEME_SCRIPT_SHA256);
   });
 
-  it('contains fallback logic that resolves unstored preference strictly to light', () => {
+  it('contains fallback logic that follows system prefers-color-scheme when unstored or system', () => {
     expect(THEME_SCRIPT_CONTENT).toContain("var t='light'");
     expect(THEME_SCRIPT_CONTENT).toContain("if(s==='dark'){t='dark'}");
-    expect(THEME_SCRIPT_CONTENT).toContain("else if(s==='system')");
+    expect(THEME_SCRIPT_CONTENT).toContain("else if(s==='light'){t='light'}");
+    expect(THEME_SCRIPT_CONTENT).toContain("else if(s==='system'||!s)");
     expect(THEME_SCRIPT_CONTENT).toContain("document.documentElement.setAttribute('data-theme',t)");
   });
 });

@@ -1,12 +1,22 @@
 import { test } from '@playwright/test';
 import { fileURLToPath } from 'url';
 import path from 'path';
+import fs from 'fs';
+import { authenticateAsLearner } from './helpers/auth';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const SCREENSHOT_DIR = path.resolve(__dirname, '../../../../docs/reviews/screenshots/phase-2');
+const DEFAULT_DIR = path.resolve(__dirname, '../../test-results/screenshots');
+const PHASE2_DIR = path.resolve(__dirname, '../../../../docs/reviews/screenshots/phase-2');
+const SCREENSHOT_DIR = process.env.CAPTURE_PHASE2_SCREENSHOTS === 'true' ? PHASE2_DIR : DEFAULT_DIR;
+if (!fs.existsSync(SCREENSHOT_DIR)) {
+  fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
+}
 
 test.describe('Phase 2 Visual Review Screenshots', () => {
+  test.beforeEach(async ({ context }) => {
+    await authenticateAsLearner(context);
+  });
   test('1. desktop-light-dashboard.png (1440x900, light theme)', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/dashboard');
@@ -108,9 +118,11 @@ test.describe('Phase 2 Visual Review Screenshots', () => {
   test('9. dashboard-keyboard-focus.png', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/dashboard');
-    // Focus on primary continue learning action link
-    const continueBtn = page.locator('a:has-text("Continue Learning")');
-    await continueBtn.focus();
+    // Focus on primary action link (Start Learning for zero progress, Continue Learning if active)
+    const actionBtn = page
+      .locator('a:has-text("Start Learning"), a:has-text("Continue Learning")')
+      .first();
+    await actionBtn.focus();
     await page.waitForTimeout(200);
     await page.screenshot({
       path: path.join(SCREENSHOT_DIR, 'dashboard-keyboard-focus.png'),

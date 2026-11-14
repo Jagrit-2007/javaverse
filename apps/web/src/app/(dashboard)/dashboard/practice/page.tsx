@@ -1,34 +1,25 @@
 import React from 'react';
-import type { Metadata } from 'next';
-import { PreviewShell } from '@/components/dashboard/PreviewShell';
-import { DailyChallenge } from '@/components/dashboard/DailyChallenge';
-import { DETERMINISTIC_DASHBOARD_DATA } from '@/components/fixtures/dashboardData';
+import { cookies } from 'next/headers';
+import { resolveSession, getSessionTokenFromCookies } from '@/lib/auth';
+import { getPracticeProblemsList } from '@/lib/practice';
+import { PracticeCatalog } from './PracticeCatalog';
 
-export const metadata: Metadata = {
-  title: 'Practice Problems — JavaVerse',
-  description: 'Java coding challenges and exercises preview.',
+export const metadata = {
+  title: 'Practice & Coding Challenges | JavaVerse',
+  description: 'Sharpen your Java problem-solving skills across OOP, DSA, and Core Java.',
 };
 
-export default function DashboardPracticePage() {
-  const challenge = DETERMINISTIC_DASHBOARD_DATA.todaysChallenge;
+export default async function PracticePage() {
+  const cookieStore = await cookies();
+  const sessionToken = getSessionTokenFromCookies(cookieStore);
+  let userId: string | undefined;
 
-  return (
-    <PreviewShell
-      title="Practice Problems & Challenges"
-      subtitle="Solve targeted Java problems with automated unit tests and instant compiler feedback."
-      phaseBadge="Phase 2 Shell Preview · Sandbox Runner activates in Phase 6"
-    >
-      <p style={{ color: 'var(--text-secondary)', lineHeight: 'var(--leading-relaxed)' }}>
-        In Phase 6, practice challenges will compile and execute inside isolated sandbox containers.
-        Here is today&apos;s featured problem preview:
-      </p>
-      <div style={{ marginTop: '1rem' }}>
-        <DailyChallenge
-          title={challenge.title}
-          estimatedMinutes={challenge.estimatedMinutes}
-          description={challenge.description}
-        />
-      </div>
-    </PreviewShell>
-  );
+  if (sessionToken) {
+    const auth = await resolveSession(sessionToken);
+    userId = auth?.user.id;
+  }
+
+  const initialProblems = await getPracticeProblemsList(userId);
+
+  return <PracticeCatalog initialProblems={initialProblems} />;
 }

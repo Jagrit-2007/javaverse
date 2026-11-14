@@ -11,7 +11,7 @@ const appDir = path.resolve(__dirname, '../apps/web/.next/server/app');
 const outputFile = path.resolve(__dirname, '../packages/security/src/static-hashes.ts');
 const envLocalFile = path.resolve(__dirname, '../apps/web/.env.local');
 
-const THEME_SCRIPT_HASH = "'sha256-GV/BZf3I5eY8+JPJIO3tQvn8LgHuYvyWCaEAXQ1cFgg='";
+const THEME_SCRIPT_HASH = "'sha256-uzc/ICGCVhC9uE7iS0jwoALziW9F9jnNPGlor+yZDuk='";
 
 if (!fs.existsSync(appDir)) {
   console.error('App directory does not exist:', appDir);
@@ -20,7 +20,7 @@ if (!fs.existsSync(appDir)) {
 
 function getAllHtmlFiles(dir) {
   let results = [];
-  const list = fs.readdirSync(dir);
+  const list = fs.readdirSync(dir).sort();
   for (const file of list) {
     const fullPath = path.join(dir, file);
     const stat = fs.statSync(fullPath);
@@ -30,7 +30,7 @@ function getAllHtmlFiles(dir) {
       results.push(fullPath);
     }
   }
-  return results;
+  return results.sort();
 }
 
 const files = getAllHtmlFiles(appDir);
@@ -65,21 +65,53 @@ const formattedContent = await prettier.format(fileContent, {
   filepath: outputFile,
 });
 
-fs.writeFileSync(outputFile, formattedContent, 'utf8');
-console.log(`Extracted ${sortedHashes.length} static inline script hashes to ${outputFile}`);
+if (fs.existsSync(outputFile)) {
+  const currentContent = fs.readFileSync(outputFile, 'utf8');
+  if (currentContent === formattedContent) {
+    console.log(`Static inline script hashes already up-to-date in ${outputFile}`);
+  } else {
+    fs.writeFileSync(outputFile, formattedContent, 'utf8');
+    console.log(`Extracted ${sortedHashes.length} static inline script hashes to ${outputFile}`);
+  }
+} else {
+  fs.writeFileSync(outputFile, formattedContent, 'utf8');
+  console.log(`Extracted ${sortedHashes.length} static inline script hashes to ${outputFile}`);
+}
 
 // Also update .env.local for zero-latency runtime consumption by middleware
 if (fs.existsSync(envLocalFile)) {
   let envContent = fs.readFileSync(envLocalFile, 'utf8');
   const hashesString = sortedHashes.join(' ');
+  let updatedEnvContent;
   if (envContent.includes('STATIC_SCRIPT_HASHES=')) {
-    envContent = envContent.replace(
+    updatedEnvContent = envContent.replace(
       /STATIC_SCRIPT_HASHES=.*/,
       `STATIC_SCRIPT_HASHES="${hashesString}"`,
     );
   } else {
-    envContent += `\nSTATIC_SCRIPT_HASHES="${hashesString}"\n`;
+    updatedEnvContent = envContent + `\nSTATIC_SCRIPT_HASHES="${hashesString}"\n`;
   }
-  fs.writeFileSync(envLocalFile, envContent, 'utf8');
-  console.log(`Updated STATIC_SCRIPT_HASHES in ${envLocalFile}`);
+  if (envContent !== updatedEnvContent) {
+    fs.writeFileSync(envLocalFile, updatedEnvContent, 'utf8');
+    console.log(`Updated STATIC_SCRIPT_HASHES in ${envLocalFile}`);
+  }
+}
+
+// Also synchronize edge runtime middleware bundle so static CSP hashes match immediately in production
+const edgeChunksDir = path.resolve(__dirname, '../apps/web/.next/server/edge/chunks');
+if (fs.existsSync(edgeChunksDir)) {
+  const edgeFiles = fs.readdirSync(edgeChunksDir);
+  for (const file of edgeFiles) {
+    if (file.endsWith('.js')) {
+      const filePath = path.join(edgeChunksDir, file);
+      let content = fs.readFileSync(filePath, 'utf8');
+      const hashArrayRegex = /([a-zA-Z0-9_$]+)=(\[(\"\'sha256-[^\"]*\'\"(?:,\s*)?)+\])/;
+      const match = hashArrayRegex.exec(content);
+      if (match) {
+        content = content.replace(hashArrayRegex, `${match[1]}=${JSON.stringify(sortedHashes)}`);
+        fs.writeFileSync(filePath, content, 'utf8');
+        console.log(`Synchronized static CSP hashes into edge chunk: ${file}`);
+      }
+    }
+  }
 }

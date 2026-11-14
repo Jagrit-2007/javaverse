@@ -7,12 +7,16 @@ interface HeroBannerProps {
   greeting?: string;
   headline?: string;
   subheadline?: string;
+  primaryActionText?: string;
+  primaryActionHref?: string;
 }
 
 export function HeroBanner({
   greeting = 'Welcome back, learner.',
   headline = "Let's make Java click today.",
   subheadline = 'Learn concepts visually, practice with real problems, and build the confidence to solve anything in Java.',
+  primaryActionText = 'Continue Learning',
+  primaryActionHref = '/dashboard/learn',
 }: HeroBannerProps) {
   return (
     <section className={styles.heroSection} aria-labelledby="hero-headline">
@@ -24,8 +28,8 @@ export function HeroBanner({
         <p className={styles.subheadline}>{subheadline}</p>
 
         <div className={styles.actions}>
-          <Link href="/dashboard/learn" className={styles.primaryAction}>
-            <span>Continue Learning</span>
+          <Link href={primaryActionHref} className={styles.primaryAction}>
+            <span>{primaryActionText}</span>
             <ArrowRight size={18} aria-hidden="true" />
           </Link>
           <Link href="/dashboard/ask" className={styles.secondaryAction}>

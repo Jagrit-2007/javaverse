@@ -1,7 +1,8 @@
 import { createHmac, randomBytes } from 'node:crypto';
 import { timingSafeCompare } from './tokens';
 
-export type PreAuthFlow = 'login' | 'bootstrap' | 'invite' | 'generic';
+export type PreAuthFlow =
+  'login' | 'signup' | 'forgot_password' | 'reset_password' | 'mfa' | 'generic';
 
 export function generateSessionCsrfToken(
   sessionPublicId: string,

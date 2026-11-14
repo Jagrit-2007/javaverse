@@ -11,6 +11,7 @@ export default function ResetPasswordPage() {
   const router = useRouter();
   const [token, setToken] = useState<string>('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [csrfToken, setCsrfToken] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -45,6 +46,16 @@ export default function ResetPasswordPage() {
     e.preventDefault();
     if (!token) {
       setError('Password reset token is missing. Please use the original email link.');
+      return;
+    }
+
+    if (password.length < 12) {
+      setError('Use at least 12 characters.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
       return;
     }
 
@@ -110,11 +121,24 @@ export default function ResetPasswordPage() {
           <form onSubmit={handleSubmit} className={styles.authForm} noValidate>
             <Input
               id="new-password"
+              name="password"
               type="password"
               label="New Password"
               description="Minimum 12 characters. Must not be common or compromised."
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              required
+              autoComplete="new-password"
+              disabled={submitting || tokenMissing}
+            />
+
+            <Input
+              id="confirm-new-password"
+              name="confirmPassword"
+              type="password"
+              label="Confirm New Password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
               required
               autoComplete="new-password"
               disabled={submitting || tokenMissing}

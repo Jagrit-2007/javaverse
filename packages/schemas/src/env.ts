@@ -31,15 +31,29 @@ export const EnvSchema = z
     SANDBOX_SHARED_SECRET: z.string().min(32),
 
     MAX_USERS: z.coerce.number().int().positive().default(5),
-    REGISTRATION_MODE: z.enum(['invite_only', 'open', 'closed']).default('invite_only'),
     TRUSTED_PROXY_IPS: z.string().default(''),
     HIBP_ENFORCEMENT_MODE: z.enum(['degraded', 'strict']).default('degraded'),
 
     // Future-compatible provider values
     AI_PROVIDER_PRIMARY: z.enum(['mock', 'anthropic', 'gemini']).default('mock'),
+    EXTERNAL_AI_ENABLED: z
+      .string()
+      .default('false')
+      .transform((val) => val === 'true')
+      .or(z.boolean().default(false)),
     AI_PROVIDER_EMBED: z.enum(['disabled', 'gemini', 'local']).default('disabled'),
     ANTHROPIC_API_KEY: z.string().optional(),
+    ANTHROPIC_MODEL: z.string().default('claude-3-5-sonnet-20241022'),
     GEMINI_API_KEY: z.string().optional(),
+    GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
+    AI_DEV_FALLBACK_TO_MOCK: z
+      .string()
+      .default('false')
+      .transform((val) => val === 'true')
+      .or(z.boolean().default(false)),
+
+    EXTERNAL_AI_DAILY_REQUEST_LIMIT_PER_USER: z.coerce.number().int().positive().default(50),
+    EXTERNAL_AI_MAX_CONCURRENCY: z.coerce.number().int().positive().default(2),
 
     SANDBOX_PROVIDER: z.enum(['mock', 'container_runner', 'judge0']).default('mock'),
     SANDBOX_CONTAINER_RUNNER_URL: z.string().optional(),
@@ -69,14 +83,23 @@ export const EnvSchema = z
       .transform((val) => val === 'true'),
 
     ALLOW_LOCAL_SERVICES_IN_PRODUCTION: z.string().optional(),
+    E2E_FIXTURES_ENABLED: z.string().optional(),
   })
   .superRefine((data, ctx) => {
-    // Phase 1 execution policy strictly requires mock providers
-    if (data.AI_PROVIDER_PRIMARY !== 'mock') {
+    // AI Provider credential validation
+    if (data.AI_PROVIDER_PRIMARY === 'anthropic' && !data.ANTHROPIC_API_KEY) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['AI_PROVIDER_PRIMARY'],
-        message: 'Phase 1 runtime policy strictly requires AI_PROVIDER_PRIMARY=mock',
+        path: ['ANTHROPIC_API_KEY'],
+        message: 'ANTHROPIC_API_KEY is required when AI_PROVIDER_PRIMARY=anthropic',
+      });
+    }
+
+    if (data.AI_PROVIDER_PRIMARY === 'gemini' && !data.GEMINI_API_KEY) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['GEMINI_API_KEY'],
+        message: 'GEMINI_API_KEY is required when AI_PROVIDER_PRIMARY=gemini',
       });
     }
 
@@ -84,12 +107,21 @@ export const EnvSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['SANDBOX_PROVIDER'],
-        message: 'Phase 1 runtime policy strictly requires SANDBOX_PROVIDER=mock',
+        message:
+          'Runtime policy strictly requires SANDBOX_PROVIDER=mock (container_runner remains REJECTED)',
       });
     }
 
     // Production guardrails
     if (data.NODE_ENV === 'production') {
+      if (data.E2E_FIXTURES_ENABLED === 'true') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['E2E_FIXTURES_ENABLED'],
+          message: 'E2E_FIXTURES_ENABLED=true is strictly prohibited when NODE_ENV=production',
+        });
+      }
+
       const secrets = [
         { key: 'SESSION_SECRET', val: data.SESSION_SECRET },
         { key: 'CURSOR_SIGNING_SECRET', val: data.CURSOR_SIGNING_SECRET },

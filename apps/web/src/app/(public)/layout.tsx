@@ -36,8 +36,11 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
 
           <div className={styles.headerActions}>
             <ThemeSelector />
-            <Link href="/dashboard" className={styles.dashboardBtn}>
-              <span>View Demo Dashboard</span>
+            <Link href="/auth/login" className={styles.loginBtn}>
+              <span>Log in</span>
+            </Link>
+            <Link href="/auth/signup" className={styles.dashboardBtn}>
+              <span>Create account</span>
             </Link>
           </div>
         </div>
@@ -63,6 +66,12 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
             <div className={styles.footerNavCol}>
               <span className={styles.footerColTitle}>Platform</span>
               <ul className={styles.footerList}>
+                <li>
+                  <Link href="/auth/signup">Create Account</Link>
+                </li>
+                <li>
+                  <Link href="/auth/login">Sign In</Link>
+                </li>
                 <li>
                   <Link href="/learn">Curriculum Preview</Link>
                 </li>

@@ -1,18 +1,16 @@
 import { NextRequest } from 'next/server';
-import { prisma } from '@javaverse/db';
+import { prisma, getDatabaseNameFromUrl } from '@javaverse/db';
 import { loginSchema } from '@javaverse/schemas';
 import { verifyPassword, verifyDummyPassword, canonicalizeEmail } from '@javaverse/security';
-import { validateCsrf } from '@/lib/csrf';
+import { createLogger } from '@javaverse/observability';
+import { validateCsrf, consumeCsrfToken } from '@/lib/csrf';
 import { checkRateLimit, getClientIp } from '@/lib/rateLimiter';
 import {
-  storeMfaTicket,
   generateSessionTokens,
   createSessionRow,
   buildCookieHeader,
   SESSION_COOKIE_NAME,
-  MFA_TICKET_COOKIE_NAME,
   SESSION_MAX_AGE_SECONDS,
-  MFA_TICKET_TTL_SECONDS,
   getSafeDisplayName,
 } from '@/lib/auth';
 import { recordAuditEvent } from '@/lib/audit';
@@ -90,10 +88,32 @@ export async function POST(request: NextRequest) {
     await verifyDummyPassword(password);
   }
 
+  // Safe test-only diagnostic reporting (Section 7: never logs passwords or hashes)
+  if (process.env.NODE_ENV === 'test') {
+    let dbName = 'unknown';
+    try {
+      dbName = getDatabaseNameFromUrl(process.env.DATABASE_URL);
+    } catch {
+      // safe fallback
+    }
+    const diagLogger = createLogger({ service: 'web' });
+    diagLogger.info(
+      {
+        accountLookupSucceeded: !!user,
+        accountStatus: user ? user.status : null,
+        passwordVerificationSucceeded: passwordValid,
+        databaseName: dbName,
+        userId: user ? user.id : null,
+        sessionCreated: !!(user && passwordValid && user.status === 'ACTIVE'),
+      },
+      'Auth login safe diagnostic checkpoint',
+    );
+  }
+
   if (!user || !passwordValid || user.status !== 'ACTIVE') {
     await recordAuditEvent({
       action: 'auth.login_failed',
-      actorType: 'ANONYMOUS',
+      actorType: 'SYSTEM',
       anonymousId: clientIp,
       clientIp,
       metadata: { reason: 'invalid_credentials' },
@@ -101,25 +121,7 @@ export async function POST(request: NextRequest) {
     return jsonError('INVALID_CREDENTIALS', 'Invalid email or password', 401);
   }
 
-  // 7. Check role: If OWNER, require MFA (Mandatory Correction 15)
-  if (user.role === 'OWNER') {
-    const ticketId = await storeMfaTicket(user.id);
-    const mfaCookie = buildCookieHeader(MFA_TICKET_COOKIE_NAME, ticketId, {
-      maxAge: MFA_TICKET_TTL_SECONDS,
-      path: '/',
-      httpOnly: true,
-      sameSite: 'lax',
-    });
-
-    const response = jsonOk({
-      mfaRequired: true,
-      ticketId, // Also provided in payload for headless / mobile clients
-    });
-    response.headers.set('Set-Cookie', mfaCookie);
-    return response;
-  }
-
-  // 8. If MEMBER: full session issuance
+  // 7. Full session issuance for learner account
   const { rawToken, tokenDigest, publicId } = generateSessionTokens();
   await createSessionRow({
     userId: user.id,
@@ -132,7 +134,6 @@ export async function POST(request: NextRequest) {
     action: 'auth.login_success',
     actorType: 'USER',
     actorUserId: user.id,
-    actorRoleAtTime: user.role,
     targetUserId: user.id,
     clientIp,
   });
@@ -141,7 +142,6 @@ export async function POST(request: NextRequest) {
     user: {
       id: user.id,
       email: user.email,
-      role: user.role,
       displayName: getSafeDisplayName(user),
     },
   });
@@ -153,6 +153,7 @@ export async function POST(request: NextRequest) {
     sameSite: 'lax',
   });
   response.headers.set('Set-Cookie', sessionCookie);
+  consumeCsrfToken(request.headers.get('x-csrf-token'));
 
   return response;
 }

@@ -21,6 +21,12 @@ export const SESSION_TOUCH_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes touch inte
 export const REAUTH_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 export const MFA_TICKET_TTL_SECONDS = 5 * 60; // 5 minutes
 
+/**
+ * Local-first hard account limit and advisory lock ID for atomic signup serialization.
+ */
+export const LOCAL_ACCOUNT_LIMIT = 5;
+export const ACCOUNT_CREATION_ADVISORY_LOCK_ID = 74619284;
+
 export interface SessionContext {
   session: Session;
   user: User;
@@ -29,14 +35,15 @@ export interface SessionContext {
 /**
  * Returns generic display name according to Part S rules:
  * - If user has displayName: return it.
- * - Otherwise: generic fallback "Owner" or "Learner".
+ * - Otherwise: generic fallback "Learner".
  * - Never derives display name from email local part.
+ * - Returns only learner-safe account fields and does not expose obsolete authorization metadata.
  */
-export function getSafeDisplayName(user: { displayName?: string | null; role: string }): string {
+export function getSafeDisplayName(user: { displayName?: string | null }): string {
   if (user.displayName && user.displayName.trim().length > 0) {
     return user.displayName.trim();
   }
-  return user.role === 'OWNER' ? 'Owner' : 'Learner';
+  return 'Learner';
 }
 
 /**
@@ -127,14 +134,30 @@ export async function createSessionRow(params: {
 }
 
 /**
+ * Extracts raw session token from Next.js server cookie store.
+ */
+export function getSessionTokenFromCookies(cookieStore: {
+  get: (name: string) => { value: string } | undefined;
+}): string | null {
+  return (
+    cookieStore.get('__Host-javaverse_session')?.value ||
+    cookieStore.get('javaverse_session')?.value ||
+    null
+  );
+}
+
+/**
  * Extracts raw session token from request cookies.
  */
 export function extractSessionCookie(request: NextRequest | Headers): string | null {
-  let cookieHeader: string | null = null;
   if ('cookies' in request && typeof request.cookies?.get === 'function') {
-    const cookie = request.cookies.get(SESSION_COOKIE_NAME);
-    if (cookie?.value) return cookie.value;
-  } else if ('get' in request && typeof request.get === 'function') {
+    const c1 = request.cookies.get('__Host-javaverse_session')?.value;
+    if (c1) return c1;
+    const c2 = request.cookies.get('javaverse_session')?.value;
+    if (c2) return c2;
+  }
+  let cookieHeader: string | null = null;
+  if ('get' in request && typeof request.get === 'function') {
     cookieHeader = request.get('cookie');
   }
 
@@ -142,8 +165,11 @@ export function extractSessionCookie(request: NextRequest | Headers): string | n
 
   const cookies = cookieHeader.split(';').map((c) => c.trim());
   for (const c of cookies) {
-    if (c.startsWith(`${SESSION_COOKIE_NAME}=`)) {
-      return c.substring(SESSION_COOKIE_NAME.length + 1);
+    if (c.startsWith('__Host-javaverse_session=')) {
+      return c.substring('__Host-javaverse_session='.length);
+    }
+    if (c.startsWith('javaverse_session=')) {
+      return c.substring('javaverse_session='.length);
     }
   }
 

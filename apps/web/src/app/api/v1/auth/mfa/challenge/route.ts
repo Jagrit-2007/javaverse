@@ -101,7 +101,6 @@ export async function POST(request: NextRequest) {
       action: 'auth.mfa_failed',
       actorType: 'USER',
       actorUserId: user.id,
-      actorRoleAtTime: user.role,
       targetUserId: user.id,
       clientIp,
       metadata: { reason: 'invalid_totp_code' },
@@ -132,7 +131,6 @@ export async function POST(request: NextRequest) {
     action: 'auth.mfa_success',
     actorType: 'USER',
     actorUserId: user.id,
-    actorRoleAtTime: user.role,
     targetUserId: user.id,
     clientIp,
   });
@@ -141,7 +139,6 @@ export async function POST(request: NextRequest) {
     user: {
       id: user.id,
       email: user.email,
-      role: user.role,
       displayName: getSafeDisplayName(user),
     },
   });

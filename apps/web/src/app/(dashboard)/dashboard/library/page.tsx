@@ -1,30 +1,36 @@
 import React from 'react';
-import type { Metadata } from 'next';
-import { FolderKanban } from 'lucide-react';
-import { PreviewShell } from '@/components/dashboard/PreviewShell';
+import { redirect } from 'next/navigation';
+import { cookies } from 'next/headers';
+import { resolveSession, getSessionTokenFromCookies } from '@/lib/auth';
+import { createCsrfToken } from '@/lib/csrf';
+import { getLibraryItems } from '@/lib/library';
+import { LibraryView } from './LibraryView';
 
-export const metadata: Metadata = {
-  title: 'Resource Library — JavaVerse',
-  description: 'Bookmarked resources and Java documentation library preview.',
+export const metadata = {
+  title: 'Library & Bookmarks | JavaVerse',
+  description: 'Manage bookmarked analyses, lessons, and practice problems with private notes.',
 };
 
-export default function DashboardLibraryPage() {
-  return (
-    <PreviewShell
-      title="Saved Library & Reference"
-      subtitle="Access your bookmarked lessons, saved code snippets, and Java API documentation summaries."
-      phaseBadge="Phase 2 Shell Preview · Knowledge Retrieval activates in Phase 9"
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#8b5cf6' }}>
-        <FolderKanban size={24} aria-hidden="true" />
-        <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--text-primary)' }}>
-          Personalized Reference Repository
-        </h2>
-      </div>
-      <p style={{ color: 'var(--text-secondary)', lineHeight: 'var(--leading-relaxed)' }}>
-        In later phases, your approved knowledge base entries, saved concept cards, and cheat sheets
-        will be indexed here for quick full-text search.
-      </p>
-    </PreviewShell>
-  );
+export default async function LibraryPage() {
+  const cookieStore = await cookies();
+  const sessionToken = getSessionTokenFromCookies(cookieStore);
+
+  let userId: string | null = null;
+  let csrfToken = '';
+
+  if (sessionToken) {
+    const auth = await resolveSession(sessionToken);
+    if (auth) {
+      userId = auth.user.id;
+      csrfToken = createCsrfToken({ sessionId: auth.session.publicId });
+    }
+  }
+
+  if (!userId) {
+    redirect('/auth/login?redirect=/dashboard/library');
+  }
+
+  const items = await getLibraryItems(userId);
+
+  return <LibraryView initialItems={items} csrfToken={csrfToken} />;
 }

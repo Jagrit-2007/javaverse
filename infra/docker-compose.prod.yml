@@ -1,0 +1,137 @@
+# ==============================================================================
+# JavaVerse Production Docker Compose Template (Part S11)
+# Hardened configuration with non-root users, resource caps, and network isolation
+# ==============================================================================
+
+services:
+  web:
+    image: ghcr.io/javaverse/web:latest
+    container_name: javaverse-web
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:3000:3000'
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://javaverse:${POSTGRES_PASSWORD}@postgres:5432/javaverse?schema=public
+      REDIS_QUEUE_URL: redis://redis-queue:6379
+      REDIS_CACHE_URL: redis://redis-cache:6379
+      SESSION_SECRET: ${SESSION_SECRET}
+      APP_MASTER_KEY: ${APP_MASTER_KEY}
+      CURSOR_SIGNING_SECRET: ${CURSOR_SIGNING_SECRET}
+      SANDBOX_SHARED_SECRET: ${SANDBOX_SHARED_SECRET}
+      APP_URL: ${APP_URL}
+      AI_PROVIDER_PRIMARY: ${AI_PROVIDER_PRIMARY:-mock}
+      SANDBOX_PROVIDER: ${SANDBOX_PROVIDER:-mock}
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1024M
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'wget',
+          '--no-verbose',
+          '--tries=1',
+          '--spider',
+          'http://127.0.0.1:3000/api/v1/health',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - app_net
+
+  worker:
+    image: ghcr.io/javaverse/worker:latest
+    container_name: javaverse-worker
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://javaverse:${POSTGRES_PASSWORD}@postgres:5432/javaverse?schema=public
+      REDIS_QUEUE_URL: redis://redis-queue:6379
+      SANDBOX_SHARED_SECRET: ${SANDBOX_SHARED_SECRET}
+      AI_PROVIDER_PRIMARY: ${AI_PROVIDER_PRIMARY:-mock}
+      SANDBOX_PROVIDER: ${SANDBOX_PROVIDER:-mock}
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 512M
+    networks:
+      - app_net
+
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: javaverse-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: javaverse
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: javaverse
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init-extensions.sql:/docker-entrypoint-initdb.d/init-extensions.sql:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1536M
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U javaverse -d javaverse']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app_net
+
+  redis-queue:
+    image: redis:7-alpine
+    container_name: javaverse-redis-queue
+    restart: unless-stopped
+    command: redis-server --appendonly yes --appendfsync everysec --maxmemory 256mb --maxmemory-policy noeviction
+    volumes:
+      - redis_queue_data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 384M
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - app_net
+
+  redis-cache:
+    image: redis:7-alpine
+    container_name: javaverse-redis-cache
+    restart: unless-stopped
+    command: redis-server --save "" --appendonly no --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_cache_data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 192M
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - app_net
+
+networks:
+  app_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_queue_data:
+  redis_cache_data:

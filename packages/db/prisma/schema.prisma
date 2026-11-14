@@ -8,11 +8,10 @@ generator client {
 }
 
 model DeploymentLimits {
-  id               Int      @id @default(1)
-  maxUsers         Int      @default(5) @map("max_users")
-  registrationMode String   @default("invite_only") @map("registration_mode")
-  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  id        Int      @id @default(1)
+  maxUsers  Int      @default(5) @map("max_users")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   @@map("deployment_limits")
 }
@@ -21,47 +20,40 @@ model User {
   id              String    @id @default(uuid()) @db.Uuid
   email           String    @unique
   passwordHash    String?   @map("password_hash")
-  role            String    @default("MEMBER")
   status          String    @default("ACTIVE")
   emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamptz
-  consentImprove  Boolean   @default(false) @map("consent_improve")
-  displayName     String?   @map("display_name") @db.VarChar(64)
-  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  consentImprove     Boolean   @default(false) @map("consent_improve")
+  displayName        String?   @map("display_name") @db.VarChar(64)
+  theme              String    @default("system") @db.VarChar(16)
+  defaultJavaVersion String    @default("21") @map("default_java_version") @db.VarChar(16)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  invitationsCreated Invitation[]      @relation("UserInvitations")
-  emailTokens        EmailToken[]
-  sessions           Session[]
-  mfaTotp            MfaTotp?
-  recoveryCodes      RecoveryCode[]
-  chats              Chat[]
-  attachments        Attachment[]
-  executions         Execution[]
-  feedbacks          Feedback[]
-  durableJobs        DurableJob[]
-  streamEvents       UserStreamEvent[]
-  auditLogsAsActor   AuditLog[]        @relation("AuditLogActor")
-  auditLogsAsTarget  AuditLog[]        @relation("AuditLogTarget")
+  emailTokens         EmailToken[]
+  sessions            Session[]
+  mfaTotp             MfaTotp?
+  recoveryCodes       RecoveryCode[]
+  chats               Chat[]
+  attachments         Attachment[]
+  executions          Execution[]
+  feedbacks           Feedback[]
+  durableJobs         DurableJob[]
+  streamEvents        UserStreamEvent[]
+  auditLogsAsActor    AuditLog[]           @relation("AuditLogActor")
+  auditLogsAsTarget   AuditLog[]           @relation("AuditLogTarget")
+  practiceSubmissions PracticeSubmission[]
+  progressEntries     UserProgress[]
+  rewards             UserReward?
+  badges              UserBadge[]
+  flashcards          UserFlashcard[]
+  libraryItems        LibraryItem[]
+  feedbackReports     FeedbackReport[]     @relation("FeedbackReportAuthor")
+  resolvedFeedbacks   FeedbackReport[]     @relation("FeedbackReportResolver")
+  kbCandidates        KbCandidate[]        @relation("KbCandidateAuthor")
+  reviewedCandidates  KbCandidate[]        @relation("KbCandidateReviewer")
 
   @@index([status])
   @@map("users")
-}
-
-model Invitation {
-  id              String   @id @default(uuid()) @db.Uuid
-  emailNormalized String   @map("email_normalized")
-  tokenHash       String   @unique @map("token_hash")
-  role            String   @default("MEMBER")
-  status          String   @default("PENDING")
-  invitedByUserId String?  @map("invited_by_user_id") @db.Uuid
-  expiresAt       DateTime @map("expires_at") @db.Timestamptz
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-
-  invitedByUser User? @relation("UserInvitations", fields: [invitedByUserId], references: [id], onDelete: SetNull)
-
-  @@index([expiresAt])
-  @@map("invitations")
 }
 
 model EmailToken {
@@ -173,6 +165,7 @@ model Message {
   analysis    Analysis?
   executions  Execution[]
   feedbacks   Feedback[]
+  feedbackReports FeedbackReport[]
 
   @@index([chatId, createdAt])
   @@map("messages")
@@ -212,6 +205,8 @@ model Analysis {
   message     Message      @relation(fields: [messageId], references: [id], onDelete: Cascade)
   executions  Execution[]
   durableJobs DurableJob[]
+  feedbackReports FeedbackReport[]
+  kbCandidates    KbCandidate[]
 
   @@map("analyses")
 }
@@ -326,7 +321,6 @@ model AuditLog {
   targetUserId    String?  @map("target_user_id") @db.Uuid
   actorPseudonym  String   @map("actor_pseudonym")
   actorType       String   @map("actor_type")
-  actorRoleAtTime String?  @map("actor_role_at_time")
   action          String
   targetMetadata  Json     @default("{}") @map("target_metadata")
   ipAddress       String?  @map("ip_address")
@@ -340,4 +334,257 @@ model AuditLog {
   @@index([targetUserId, occurredAt(sort: Desc)])
   @@index([action])
   @@map("audit_logs")
+}
+
+model CurriculumLesson {
+  id               String   @id @default(uuid()) @db.Uuid
+  slug             String   @unique @db.VarChar(128)
+  title            String   @db.VarChar(255)
+  track            String   @db.VarChar(64)
+  module           String   @db.VarChar(64)
+  orderIndex       Int      @map("order_index")
+  published        Boolean  @default(false)
+  difficulty       String   @default("EASY") @db.VarChar(32)
+  estimatedMinutes Int      @default(15) @map("estimated_minutes")
+  hook             String   @db.Text
+  contentSimple    String   @map("content_simple") @db.Text
+  contentStandard  String   @map("content_standard") @db.Text
+  contentDeep      String   @map("content_deep") @db.Text
+  visualization    Json
+  codeStarter      String   @map("code_starter") @db.Text
+  codeSolution     String?  @map("code_solution") @db.Text
+  commonMistakes   Json     @map("common_mistakes")
+  quiz             Json
+  challenge        Json
+  javaVersion      String   @default("21") @map("java_version") @db.VarChar(16)
+  metadata         Json
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([track, orderIndex])
+  @@index([published])
+  @@map("curriculum_lessons")
+}
+
+model PracticeProblem {
+  id           String   @id @default(uuid()) @db.Uuid
+  slug         String   @unique @db.VarChar(128)
+  title        String   @db.VarChar(255)
+  topic        String   @db.VarChar(64)
+  difficulty   String   @default("EASY") @db.VarChar(32)
+  orderIndex   Int      @map("order_index")
+  prompt       String   @db.Text
+  starterCode  String   @map("starter_code") @db.Text
+  solutionCode String?  @map("solution_code") @db.Text
+  sampleTests  Json     @map("sample_tests")
+  hiddenTests  Json     @map("hidden_tests")
+  hints        Json
+  testHarness  String   @map("test_harness") @db.Text
+  published    Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  submissions PracticeSubmission[]
+
+  @@index([topic, difficulty])
+  @@index([orderIndex])
+  @@map("practice_problems")
+}
+
+model PracticeSubmission {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  problemId   String   @map("problem_id") @db.Uuid
+  code        String   @db.Text
+  status      String   @db.VarChar(32)
+  testsPassed Int      @default(0) @map("tests_passed")
+  testsTotal  Int      @default(0) @map("tests_total")
+  timeMs      Int?     @map("time_ms")
+  memoryKb    Int?     @map("memory_kb")
+  stdout      String?  @db.Text
+  stderr      String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  problem PracticeProblem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  @@index([userId, problemId, createdAt(sort: Desc)])
+  @@map("practice_submissions")
+}
+
+model UserProgress {
+  id              String    @id @default(uuid()) @db.Uuid
+  userId          String    @map("user_id") @db.Uuid
+  itemType        String    @map("item_type") @db.VarChar(32)
+  itemId          String    @map("item_id") @db.VarChar(128)
+  completed       Boolean   @default(false)
+  score           Int       @default(0)
+  lastAttemptedAt DateTime  @default(now()) @map("last_attempted_at") @db.Timestamptz
+  completedAt     DateTime? @map("completed_at") @db.Timestamptz
+  metadata        Json      @default("{}")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, itemType, itemId])
+  @@index([userId, itemType, completed])
+  @@map("user_progress")
+}
+
+model UserReward {
+  id                  String   @id @default(uuid()) @db.Uuid
+  userId              String   @unique @map("user_id") @db.Uuid
+  xp                  Int      @default(0)
+  streakDays          Int      @default(0) @map("streak_days")
+  lastActivityDate    String?  @map("last_activity_date") @db.VarChar(10)
+  gamificationEnabled Boolean  @default(true) @map("gamification_enabled")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_rewards")
+}
+
+model UserBadge {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  badgeKey  String   @map("badge_key") @db.VarChar(64)
+  awardedAt DateTime @default(now()) @map("awarded_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, badgeKey])
+  @@index([userId, awardedAt(sort: Desc)])
+  @@map("user_badges")
+}
+
+model UserFlashcard {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  front        String   @db.Text
+  back         String   @db.Text
+  sourceType   String?  @default("quiz_mistake") @map("source_type") @db.VarChar(32)
+  sourceId     String?  @map("source_id") @db.VarChar(128)
+  intervalDays Int      @default(1) @map("interval_days")
+  easeFactor   Float    @default(2.5) @map("ease_factor")
+  reviewCount  Int      @default(0) @map("review_count")
+  nextReviewAt DateTime @default(now()) @map("next_review_at") @db.Timestamptz
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, nextReviewAt])
+  @@map("user_flashcards")
+}
+
+model LibraryItem {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  itemType   String   @map("item_type") @db.VarChar(32)
+  itemId     String   @map("item_id") @db.VarChar(128)
+  title      String   @db.VarChar(255)
+  notes      String?  @db.Text
+  tags       String[] @default([])
+  bookmarked Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, itemType, itemId])
+  @@index([userId, bookmarked])
+  @@map("library_items")
+}
+
+model FeedbackReport {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  analysisId String?   @map("analysis_id") @db.Uuid
+  messageId  String?   @map("message_id") @db.Uuid
+  issueType  String    @map("issue_type") @db.VarChar(32)
+  details    String    @db.Text
+  status     String    @default("PENDING") @db.VarChar(32)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  resolvedAt DateTime? @map("resolved_at") @db.Timestamptz
+  resolvedBy String?   @map("resolved_by") @db.Uuid
+
+  user       User      @relation("FeedbackReportAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  resolver   User?     @relation("FeedbackReportResolver", fields: [resolvedBy], references: [id], onDelete: SetNull)
+  analysis   Analysis? @relation(fields: [analysisId], references: [id], onDelete: SetNull)
+  message    Message?  @relation(fields: [messageId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
+  @@map("feedback_reports")
+}
+
+model KbCandidate {
+  id                 String    @id @default(uuid()) @db.Uuid
+  analysisId         String    @map("analysis_id") @db.Uuid
+  userId             String    @map("user_id") @db.Uuid
+  status             String    @default("PROPOSED") @db.VarChar(32)
+  topic              String    @db.VarChar(64)
+  subtopics          String[]  @default([])
+  title              String    @db.VarChar(255)
+  anonymizedQuestion String    @map("anonymized_question") @db.Text
+  verifiedSolution   String    @map("verified_solution") @db.Text
+  explanation        String    @db.Text
+  reviewedBy         String?   @map("reviewed_by") @db.Uuid
+  reviewedAt         DateTime? @map("reviewed_at") @db.Timestamptz
+  rejectionReason    String?   @map("rejection_reason") @db.Text
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  analysis   Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  user       User     @relation("KbCandidateAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  reviewer   User?    @relation("KbCandidateReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+  kbItem     KbItem?
+
+  @@index([status])
+  @@index([topic])
+  @@index([userId])
+  @@map("kb_candidates")
+}
+
+model KbItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  candidateId String?  @unique @map("candidate_id") @db.Uuid
+  title       String   @db.VarChar(255)
+  topic       String   @db.VarChar(64)
+  content     String   @db.Text
+  published   Boolean  @default(true)
+  sourceType  String   @default("APPROVED_ANALYSIS") @map("source_type") @db.VarChar(32)
+  sourceId    String?  @map("source_id") @db.VarChar(128)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  candidate   KbCandidate? @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  // Intentional Raw SQL GIN Index Exception:
+  // The PostgreSQL full-text search index:
+  //   CREATE INDEX "kb_items_search_idx" ON "kb_items" USING gin(to_tsvector('english', "title" || ' ' || "content"));
+  // was created in migration 20261106020000_evaluation_quality_kb.
+  // Prisma Schema DSL does not support functional/expression GIN indexes (expressions with string concatenation and functions).
+  // This index is preserved in the database and explicitly asserted in scripts/verify-clean-db.mjs.
+  // Do NOT add a Prisma migration that alters or drops this index.
+  @@index([published])
+  @@index([topic])
+  @@map("kb_items")
+}
+
+model EvalRun {
+  id            String   @id @default(uuid()) @db.Uuid
+  suiteName     String   @map("suite_name") @db.VarChar(128)
+  model         String   @db.VarChar(64)
+  promptVersion String   @map("prompt_version") @db.VarChar(64)
+  totalCases    Int      @map("total_cases")
+  passedCases   Int      @map("passed_cases")
+  score         Float
+  metadata      Json     @default("{}")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([createdAt(sort: Desc)])
+  @@index([suiteName])
+  @@map("eval_runs")
 }

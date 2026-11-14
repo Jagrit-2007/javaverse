@@ -1,0 +1,31 @@
+.workspaceLayout {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 120px);
+  max-width: 1600px;
+  margin: 0 auto;
+  gap: var(--space-3);
+}
+
+@media (max-width: 768px) {
+  .workspaceLayout {
+    height: auto;
+    min-height: calc(100vh - 140px);
+  }
+}
+
+.splitPane {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+  flex: 1;
+  min-height: 0;
+}
+
+@media (max-width: 1024px) {
+  .splitPane {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+}
+

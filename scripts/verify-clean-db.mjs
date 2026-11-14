@@ -1,9 +1,13 @@
 import { execSync } from 'node:child_process';
 import { PrismaClient } from '../packages/db/node_modules/@prisma/client/index.js';
+import { assertSafeTestDatabase } from '../packages/db/src/safety.ts';
 
-const TEST_DB_NAME = 'javaverse_clean_verify_test';
+const TEST_DB_NAME = 'javaverse_clean_verify';
 const BASE_HOST = '127.0.0.1:5432';
 const TEST_DB_URL = `postgresql://javaverse:javaverse@${BASE_HOST}/${TEST_DB_NAME}?schema=public`;
+
+// Safety guard: Strict allowlist check
+assertSafeTestDatabase(TEST_DB_URL, { requireTestEnv: false });
 
 // Safety guard: Never run against production or non-local database
 if (process.env.NODE_ENV === 'production') {
@@ -73,39 +77,24 @@ try {
     throw new Error(`Invalid deployment_limits state: ${JSON.stringify(limits)}`);
   }
 
-  // Verify at-most-one active OWNER constraint
-  const owner1 = await prisma.user.create({
+  // Verify standard learner account creation without role
+  const learner1 = await prisma.user.create({
     data: {
-      email: 'owner1@javaverse.local',
-      role: 'OWNER',
+      email: 'learner1@javaverse.local',
       status: 'ACTIVE',
     },
   });
-
-  let secondOwnerFailed = false;
-  try {
-    await prisma.user.create({
-      data: {
-        email: 'owner2@javaverse.local',
-        role: 'OWNER',
-        status: 'ACTIVE',
-      },
-    });
-  } catch {
-    secondOwnerFailed = true;
-    console.log('  Confirmed: Single active OWNER constraint prevented second OWNER');
+  if ('role' in learner1) {
+    throw new Error('Invariant violation: User schema still exposes a role property');
   }
-
-  if (!secondOwnerFailed) {
-    throw new Error('Invariant violation: Second active OWNER was permitted');
-  }
+  console.log('  Confirmed: User created without role column as standard learner');
 
   // Verify chat slot constraint (between 1 and 3)
   let invalidSlotFailed = false;
   try {
     await prisma.chat.create({
       data: {
-        userId: owner1.id,
+        userId: learner1.id,
         slot: 4,
         title: 'Invalid Slot',
       },
@@ -123,7 +112,7 @@ try {
   const session = await prisma.session.create({
     data: {
       id: 'test-session-digest-clean-db',
-      userId: owner1.id,
+      userId: learner1.id,
       expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000),
     },
   });
@@ -133,14 +122,25 @@ try {
   }
   console.log('  Confirmed: Session publicId and lastSeenAt verified');
 
-  const updatedOwner = await prisma.user.update({
-    where: { id: owner1.id },
-    data: { displayName: 'Initial Platform Owner' },
+  const updatedLearner = await prisma.user.update({
+    where: { id: learner1.id },
+    data: { displayName: 'Initial Platform Learner' },
   });
-  if (updatedOwner.displayName !== 'Initial Platform Owner') {
+  if (updatedLearner.displayName !== 'Initial Platform Learner') {
     throw new Error('Failed to persist displayName on user');
   }
   console.log('  Confirmed: User displayName persistence verified');
+
+  // Verify raw expression GIN index exists on kb_items (intentional raw SQL exception in schema.prisma)
+  const kbIndexes = await prisma.$queryRaw`
+    SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'kb_items' AND indexname = 'kb_items_search_idx';
+  `;
+  if (!Array.isArray(kbIndexes) || kbIndexes.length !== 1) {
+    throw new Error(
+      'Schema drift: Expected raw expression GIN index kb_items_search_idx on kb_items table',
+    );
+  }
+  console.log('  Confirmed: Raw expression GIN index kb_items_search_idx verified');
 
   await prisma.$disconnect();
 

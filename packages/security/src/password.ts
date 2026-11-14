@@ -41,8 +41,11 @@ export function validatePasswordPolicy(password: string): { valid: boolean; reas
   if (typeof password !== 'string') {
     return { valid: false, reason: 'Password must be a string' };
   }
+  if (/^\s|\s$/.test(password)) {
+    return { valid: false, reason: 'Password cannot begin or end with whitespace.' };
+  }
   if (password.length < 12) {
-    return { valid: false, reason: 'Password must be at least 12 characters long' };
+    return { valid: false, reason: 'Use at least 12 characters.' };
   }
   if (password.length > 128) {
     return { valid: false, reason: 'Password must not exceed 128 characters' };
@@ -50,20 +53,33 @@ export function validatePasswordPolicy(password: string): { valid: boolean; reas
   if (isCommonPassword(password)) {
     return {
       valid: false,
-      reason:
-        'This password is too common and easily guessed. Please choose a more secure password.',
+      reason: 'This password is too common. Choose a longer, less predictable password.',
     };
   }
   return { valid: true };
 }
 
+export interface BreachCheckResult {
+  breached: boolean;
+  common?: boolean;
+  count: number;
+  degraded: boolean;
+  message?: string;
+}
+
 export async function checkPasswordBreach(
   password: string,
   mode: 'degraded' | 'strict' = 'degraded',
-): Promise<{ breached: boolean; count: number; degraded: boolean }> {
+): Promise<BreachCheckResult> {
   // 1. Mandatory local blocklist check
   if (isCommonPassword(password)) {
-    return { breached: true, count: 10000, degraded: false };
+    return {
+      common: true,
+      breached: true,
+      count: 10000,
+      degraded: false,
+      message: 'This password is too common. Choose a longer, less predictable password.',
+    };
   }
 
   // 2. Privacy-preserving HIBP k-Anonymity range check
@@ -86,24 +102,45 @@ export async function checkPasswordBreach(
       if (mode === 'strict') {
         throw new Error(`HIBP responded with status ${response.status}`);
       }
-      return { breached: false, count: 0, degraded: true };
+      return {
+        common: false,
+        breached: false,
+        count: 0,
+        degraded: true,
+        message:
+          'The online breach check is temporarily unavailable. JavaVerse applied local password checks instead.',
+      };
     }
 
     const text = await response.text();
-    const lines = text.split('\r\n');
+    const lines = text.split(/\r?\n/);
     for (const line of lines) {
       const [hashSuffix, countStr] = line.split(':');
-      if (hashSuffix && hashSuffix.trim() === suffix) {
+      if (hashSuffix && hashSuffix.trim().toUpperCase() === suffix) {
         const count = parseInt(countStr || '1', 10);
-        return { breached: true, count, degraded: false };
+        return {
+          common: false,
+          breached: true,
+          count,
+          degraded: false,
+          message:
+            'This password appears in a known breach list. Choose a different password or use a password manager to generate one.',
+        };
       }
     }
 
-    return { breached: false, count: 0, degraded: false };
+    return { common: false, breached: false, count: 0, degraded: false };
   } catch (err) {
     if (mode === 'strict') {
       throw new Error(`Breach check service unavailable in strict mode: ${(err as Error).message}`);
     }
-    return { breached: false, count: 0, degraded: true };
+    return {
+      common: false,
+      breached: false,
+      count: 0,
+      degraded: true,
+      message:
+        'The online breach check is temporarily unavailable. JavaVerse applied local password checks instead.',
+    };
   }
 }

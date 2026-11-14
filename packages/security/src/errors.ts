@@ -9,6 +9,15 @@ export interface SafeError {
   };
 }
 
+export class SecurityValidationError extends Error {
+  code: string;
+  constructor(message: string, code = 'SECURITY_VALIDATION_ERROR') {
+    super(message);
+    this.name = 'SecurityValidationError';
+    this.code = code;
+  }
+}
+
 export function createSafeErrorEnvelope(
   code: string,
   userMessage: string,

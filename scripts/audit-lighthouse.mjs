@@ -32,7 +32,6 @@ const serverProc = spawn('pnpm', ['--filter', '@javaverse/web', 'start'], {
   env: {
     ...process.env,
     PORT: '3000',
-    E2E_FIXTURES_ENABLED: 'true',
   },
   stdio: 'inherit',
   detached: true,

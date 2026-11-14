@@ -63,7 +63,6 @@ export async function POST(request: NextRequest) {
       action: 'auth.reauth_failed',
       actorType: 'USER',
       actorUserId: sessionCtx.user.id,
-      actorRoleAtTime: sessionCtx.user.role,
       targetUserId: sessionCtx.user.id,
       clientIp,
     });
@@ -79,7 +78,6 @@ export async function POST(request: NextRequest) {
     action: 'auth.reauth_success',
     actorType: 'USER',
     actorUserId: sessionCtx.user.id,
-    actorRoleAtTime: sessionCtx.user.role,
     targetUserId: sessionCtx.user.id,
     clientIp,
   });

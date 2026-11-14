@@ -19,6 +19,23 @@ export interface CspOptions {
 export { STATIC_THEME_SCRIPT_HASH, STATIC_ROUTE_SCRIPT_HASHES } from './static-hashes';
 import { STATIC_THEME_SCRIPT_HASH, STATIC_ROUTE_SCRIPT_HASHES } from './static-hashes';
 
+/**
+ * Generate a cryptographically strong 16-byte base64-encoded CSP nonce
+ * Compatible with Edge Runtime, Node.js, and browser environments.
+ */
+export function generateCspNonce(): string {
+  const bytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(bytes);
+  if (typeof Buffer !== 'undefined') {
+    return Buffer.from(bytes).toString('base64');
+  }
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]!);
+  }
+  return btoa(binary);
+}
+
 export function buildStaticCsp(hashes: string[] = STATIC_ROUTE_SCRIPT_HASHES): string {
   const scriptHashes = hashes.join(' ');
   return [

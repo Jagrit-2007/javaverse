@@ -1,13 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
 export type TokenPurpose =
-  | 'owner_bootstrap'
-  | 'invitation'
-  | 'email_verification'
-  | 'password_reset'
-  | 'recovery_code'
-  | 'session'
-  | 'mfa_ticket';
+  'email_verification' | 'password_reset' | 'recovery_code' | 'session' | 'mfa_ticket';
 
 export function generateRandomToken(bytes = 32): string {
   return randomBytes(bytes).toString('hex');

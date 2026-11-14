@@ -1,5 +1,8 @@
 # Phase 3 Security Repair & Supply-Chain Remediation Addendum
 
+> [!IMPORTANT]
+> **Historical record.** This document describes an earlier repository state and is not the current product specification.
+
 **Branch:** `phase/03-authentication`  
 **Timestamp:** 2026-11-05T19:10 IST  
 **Status:** Security repairs & supply-chain remediation completed and verified

@@ -80,12 +80,13 @@ export default function ForgotPasswordPage() {
           <form onSubmit={handleSubmit} className={styles.authForm} noValidate>
             <Input
               id="reset-email"
+              name="email"
               type="email"
               label="Email address"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              autoComplete="email"
+              autoComplete="username"
               disabled={submitting}
             />
 

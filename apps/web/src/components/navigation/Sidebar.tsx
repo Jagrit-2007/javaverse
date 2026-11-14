@@ -36,7 +36,6 @@ export const SIDEBAR_NAV_ITEMS: NavItem[] = [
 export interface SidebarProps {
   user?: {
     displayName: string;
-    role: string;
   };
 }
 
@@ -44,12 +43,10 @@ export function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname();
 
   const displayName = user?.displayName || 'Learner';
-  const roleDisplay = user?.role
-    ? user.role === 'OWNER'
-      ? 'Workspace Owner'
-      : 'Learner'
-    : 'Workspace Member';
+  const roleDisplay = 'Learner';
   const initial = displayName.charAt(0).toUpperCase();
+
+  const navItems = SIDEBAR_NAV_ITEMS;
 
   return (
     <aside className={styles.sidebar} aria-label="Desktop Sidebar Navigation">
@@ -61,7 +58,7 @@ export function Sidebar({ user }: SidebarProps) {
 
       <nav className={styles.nav} aria-label="Dashboard navigation">
         <ul className={styles.navList}>
-          {SIDEBAR_NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             const Icon = item.icon;
             const isActive =
               item.href === '/dashboard'

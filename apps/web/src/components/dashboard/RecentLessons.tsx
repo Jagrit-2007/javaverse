@@ -22,29 +22,35 @@ export function RecentLessons({ lessons = [] }: RecentLessonsProps) {
         </Link>
       </div>
 
-      <ul className={styles.list}>
-        {lessons.map((lesson) => {
-          return (
-            <li key={lesson.id} className={styles.item}>
-              <div className={styles.statusIcon} aria-hidden="true">
-                {lesson.status === 'completed' ? (
-                  <CheckCircle2 size={18} color="#10b981" />
-                ) : lesson.status === 'in_progress' ? (
-                  <CircleDot size={18} color="#0ea5e9" />
-                ) : (
-                  <PlayCircle size={18} color="var(--text-muted)" />
-                )}
-              </div>
-              <div className={styles.info}>
-                <Link href="/dashboard/learn" className={styles.lessonLink}>
-                  {lesson.title}
-                </Link>
-                <span className={styles.relativeTime}>{lesson.relativeTime}</span>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+      {lessons.length === 0 ? (
+        <p className={styles.emptyText}>
+          No lessons completed yet. Start your Java learning journey to begin tracking progress.
+        </p>
+      ) : (
+        <ul className={styles.list}>
+          {lessons.map((lesson) => {
+            return (
+              <li key={lesson.id} className={styles.item}>
+                <div className={styles.statusIcon} aria-hidden="true">
+                  {lesson.status === 'completed' ? (
+                    <CheckCircle2 size={18} color="#10b981" />
+                  ) : lesson.status === 'in_progress' ? (
+                    <CircleDot size={18} color="#0ea5e9" />
+                  ) : (
+                    <PlayCircle size={18} color="var(--text-muted)" />
+                  )}
+                </div>
+                <div className={styles.info}>
+                  <Link href="/dashboard/learn" className={styles.lessonLink}>
+                    {lesson.title}
+                  </Link>
+                  <span className={styles.relativeTime}>{lesson.relativeTime}</span>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </Card>
   );
 }

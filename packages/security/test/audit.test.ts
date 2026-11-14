@@ -42,13 +42,9 @@ describe('Audit Logging Primitives', () => {
 
   it('allows validated UUID references while rejecting malformed or credential-like values', () => {
     const validUuid1 = 'a0000000-0000-4000-8000-000000000001';
-    const validUuid2 = 'b0000000-0000-4000-8000-000000000002';
-    const validUuid3 = 'c0000000-0000-4000-8000-000000000003';
 
     const metadata = {
       revoked_session_public_id: validUuid1,
-      previous_invitation_id: validUuid2,
-      new_invitation_id: validUuid3,
       // Malformed or non-UUID values for UUID fields must be stripped
       invalid_uuid_session: 'not-a-real-uuid',
       session_digest: 'd2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2',
@@ -59,15 +55,11 @@ describe('Audit Logging Primitives', () => {
     const sanitized = sanitizeAuditMetadata(metadata);
     expect(sanitized).toEqual({
       revoked_session_public_id: validUuid1,
-      previous_invitation_id: validUuid2,
-      new_invitation_id: validUuid3,
     });
 
     // Test non-UUID rejected on UUID key
     const nonUuidRejected = sanitizeAuditMetadata({
       revoked_session_public_id: 'invalid-non-uuid-string',
-      previous_invitation_id: 'user@example.com',
-      new_invitation_id: '12345',
     });
     expect(nonUuidRejected).toEqual({});
   });

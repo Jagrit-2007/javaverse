@@ -34,9 +34,12 @@ export default function LandingPage() {
           </p>
 
           <div className={styles.heroActions}>
-            <Link href="/dashboard" className={styles.primaryCta}>
-              <span>View Demo Dashboard</span>
+            <Link href="/auth/signup" className={styles.primaryCta}>
+              <span>Create account</span>
               <ArrowRight size={18} aria-hidden="true" />
+            </Link>
+            <Link href="/auth/login" className={styles.secondaryCta}>
+              <span>Log in</span>
             </Link>
             <Link href="/learn" className={styles.secondaryCta}>
               <BookOpen size={16} aria-hidden="true" />
@@ -105,12 +108,12 @@ export default function LandingPage() {
             shell.
           </p>
           <div className={styles.ctaActions}>
-            <Link href="/dashboard" className={styles.primaryCta}>
-              <span>Launch Demo Dashboard</span>
+            <Link href="/auth/signup" className={styles.primaryCta}>
+              <span>Create Account</span>
               <ArrowRight size={18} aria-hidden="true" />
             </Link>
-            <Link href="/learn" className={styles.secondaryCta}>
-              <span>Browse 4 Core Tracks</span>
+            <Link href="/auth/login" className={styles.secondaryCta}>
+              <span>Log In</span>
             </Link>
           </div>
         </div>

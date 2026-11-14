@@ -42,19 +42,37 @@ export async function POST(request: NextRequest) {
 
   const parsed = resetPasswordSchema.safeParse(body);
   if (!parsed.success) {
-    return jsonError('VALIDATION_ERROR', 'Invalid reset parameters', 400, parsed.error.issues);
+    const primaryError = parsed.error.issues[0]?.message || 'Invalid reset parameters';
+    return jsonError('VALIDATION_ERROR', primaryError, 400, parsed.error.issues);
   }
 
   const { token, password } = parsed.data;
 
   // Breach check
   const breach = await checkPasswordBreach(password, env.HIBP_ENFORCEMENT_MODE);
+  if (breach.common) {
+    return jsonError(
+      'PASSWORD_COMMON',
+      breach.message || 'This password is too common. Choose a longer, less predictable password.',
+      400,
+    );
+  }
   if (breach.breached) {
     return jsonError(
       'PASSWORD_BREACHED',
-      'This password appears in known security breaches. Please choose a different password.',
+      breach.message ||
+        'This password appears in a known breach list. Choose a different password or use a password manager to generate one.',
       400,
     );
+  }
+  if (breach.degraded) {
+    await recordAuditEvent({
+      action: 'auth.breach_check_degraded',
+      actorType: 'SYSTEM',
+      anonymousId: clientIp,
+      clientIp,
+      metadata: { provider: 'hibp', reason: 'unavailable', degraded: true },
+    });
   }
 
   const keys = getServerKeys();
@@ -65,7 +83,7 @@ export async function POST(request: NextRequest) {
   const tokenRecord = await prisma.emailToken.findFirst({
     where: {
       tokenHash,
-      purpose: 'PASSWORD_RESET',
+      purpose: 'RESET_PASSWORD',
       usedAt: null,
       expiresAt: { gt: now },
     },
