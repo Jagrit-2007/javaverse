@@ -87,3 +87,88 @@ export function assertSafeTestDatabase(
 
   return dbName;
 }
+
+export interface SafeDatabaseDiagnostics {
+  dbHost: string;
+  dbPort: string;
+  dbName: string;
+}
+
+/**
+ * Safely extracts host, port, and database name from a database URL.
+ * Strictly guarantees that passwords, usernames, query parameters,
+ * and full connection strings are NEVER returned or exposed.
+ */
+export function getSafeDatabaseDiagnostics(databaseUrl?: string): SafeDatabaseDiagnostics {
+  if (!databaseUrl || typeof databaseUrl !== 'string' || !databaseUrl.trim()) {
+    throw new Error('Refusing database connection diagnostics: missing database URL');
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(databaseUrl.trim());
+  } catch {
+    throw new Error('Refusing database connection diagnostics: malformed database URL');
+  }
+
+  const dbHost = parsed.hostname || 'localhost';
+  const dbPort = parsed.port || '5432';
+  const pathname = parsed.pathname || '';
+  const dbName = pathname.replace(/^\/+/, '').split('?')[0]?.trim();
+  if (!dbName) {
+    throw new Error('Refusing database connection diagnostics: empty or missing database name');
+  }
+
+  return { dbHost, dbPort, dbName };
+}
+
+export interface VerifyStartupGuardOptions {
+  nodeEnv?: string;
+  logger?: {
+    info: (obj: Record<string, unknown>, msg?: string) => void;
+    warn: (obj: Record<string, unknown>, msg?: string) => void;
+    error?: (obj: Record<string, unknown>, msg?: string) => void;
+  };
+}
+
+/**
+ * Startup database guard.
+ * Logs safe connection diagnostics (component, host, port, dbName, mode).
+ * - In test mode: fails startup if database name is not in the test allowlist.
+ * - In dev mode: displays a clear warning if database name ends with '_test'.
+ *
+ * Never logs credentials, usernames, passwords, or full URLs.
+ */
+export function verifyDatabaseStartupGuard(
+  component: 'web' | 'worker',
+  databaseUrl?: string,
+  options?: VerifyStartupGuardOptions,
+): { component: string; dbHost: string; dbPort: string; dbName: string; mode: string } {
+  const url = databaseUrl !== undefined ? databaseUrl : process.env.DATABASE_URL;
+  const { dbHost, dbPort, dbName } = getSafeDatabaseDiagnostics(url);
+  const mode = options?.nodeEnv ?? process.env.NODE_ENV ?? 'development';
+
+  if (mode === 'test') {
+    if (!(ALLOWED_TEST_DATABASES as readonly string[]).includes(dbName)) {
+      throw new Error(
+        `CRITICAL STARTUP GUARD: Database "${dbName}" is not an allowlisted test database (${ALLOWED_TEST_DATABASES.join(', ')}). Test mode strictly requires an isolated test database.`,
+      );
+    }
+  } else if (mode === 'development') {
+    if (dbName.endsWith('_test')) {
+      const warnMsg = `WARNING: Development mode is connected to test database "${dbName}". Normal development should use a dedicated development database.`;
+      if (options?.logger) {
+        options.logger.warn({ component, dbHost, dbPort, dbName, mode }, warnMsg);
+      } else {
+        console.warn(warnMsg);
+      }
+    }
+  }
+
+  const infoMsg = `Database startup diagnostics: ${component} connected to ${dbName} on ${dbHost}:${dbPort} (mode: ${mode})`;
+  if (options?.logger) {
+    options.logger.info({ component, dbHost, dbPort, dbName, mode }, infoMsg);
+  }
+
+  return { component, dbHost, dbPort, dbName, mode };
+}

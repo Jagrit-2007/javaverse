@@ -1,8 +1,27 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { prisma, assertSafeTestDatabase } from '@javaverse/db';
 import { Redis } from 'ioredis';
 
-const VALID_PASSWORD = 'MemberP@ssw0rd!2026';
+const VALID_PASSWORD = 'LearnerP@ssw0rd!2026';
+
+async function registerAndLoginLearner(page: Page, email: string, displayName = 'Learner') {
+  await page.goto('/auth/signup');
+  await page.fill('#signup-name', displayName);
+  await page.fill('#signup-email', email);
+  await page.fill('#signup-password', VALID_PASSWORD);
+  await page.fill('#signup-confirm-password', VALID_PASSWORD);
+  await page.click('button:has-text("Create account")');
+  await expect(page).toHaveURL(/\/auth\/login\?created=1/);
+  await expect(
+    page.locator('text=Account created successfully. Sign in with your email and password.'),
+  ).toBeVisible();
+  await page.fill('#login-email', email);
+  await expect(page.locator('#login-email')).toHaveValue(email);
+  await page.fill('#login-password', VALID_PASSWORD);
+  await expect(page.locator('#login-password')).toHaveValue(VALID_PASSWORD);
+  await page.click('button:has-text("Sign In")');
+  await expect(page).toHaveURL(/\/dashboard/);
+}
 
 test.describe('Part 4 & 8: Comprehensive Ask-AI End-to-End Suite (27 Browser Scenarios)', () => {
   let userEmail: string;
@@ -53,14 +72,8 @@ test.describe('Part 4 & 8: Comprehensive Ask-AI End-to-End Suite (27 Browser Sce
       pageErrors.push(err);
     });
 
-    // Sign up learner
-    await page.goto('/auth/signup');
-    await page.fill('#signup-name', 'Mock Learner');
-    await page.fill('#signup-email', userEmail);
-    await page.fill('#signup-password', VALID_PASSWORD);
-    await page.fill('#signup-confirm-password', VALID_PASSWORD);
-    await page.click('button:has-text("Create account")');
-    await expect(page).toHaveURL(/\/dashboard/);
+    // Sign up learner and access dashboard
+    await registerAndLoginLearner(page, userEmail, 'Mock Learner');
 
     await page.goto('/dashboard/ask');
     await expect(page).toHaveURL(/\/dashboard\/ask/);
@@ -152,13 +165,7 @@ test.describe('Part 4 & 8: Comprehensive Ask-AI End-to-End Suite (27 Browser Sce
     page,
   }) => {
     // Sign up User A
-    await page.goto('/auth/signup');
-    await page.fill('#signup-name', 'Learner Alpha');
-    await page.fill('#signup-email', userEmail);
-    await page.fill('#signup-password', VALID_PASSWORD);
-    await page.fill('#signup-confirm-password', VALID_PASSWORD);
-    await page.click('button:has-text("Create account")');
-    await expect(page).toHaveURL(/\/dashboard/);
+    await registerAndLoginLearner(page, userEmail, 'Learner Alpha');
 
     // Intercept /api/v1/ai/providers to simulate configured Gemini external provider
     await page.route('**/api/v1/ai/providers', async (route) => {
@@ -292,13 +299,7 @@ test.describe('Part 4 & 8: Comprehensive Ask-AI End-to-End Suite (27 Browser Sce
 
     // Scenario 14: A second learner does not inherit consent
     // Sign up User B in the same browser
-    await page.goto('/auth/signup');
-    await page.fill('#signup-name', 'Learner Beta');
-    await page.fill('#signup-email', userBEmail);
-    await page.fill('#signup-password', VALID_PASSWORD);
-    await page.fill('#signup-confirm-password', VALID_PASSWORD);
-    await page.click('button:has-text("Create account")');
-    await expect(page).toHaveURL(/\/dashboard/);
+    await registerAndLoginLearner(page, userBEmail, 'Learner Beta');
 
     await page.goto('/dashboard/ask');
     await page.locator('button:has-text("Slot 1")').first().click();
@@ -314,13 +315,7 @@ test.describe('Part 4 & 8: Comprehensive Ask-AI End-to-End Suite (27 Browser Sce
     page,
   }) => {
     // Authenticate learner
-    await page.goto('/auth/signup');
-    await page.fill('#signup-name', 'Usage Tester');
-    await page.fill('#signup-email', userEmail);
-    await page.fill('#signup-password', VALID_PASSWORD);
-    await page.fill('#signup-confirm-password', VALID_PASSWORD);
-    await page.click('button:has-text("Create account")');
-    await expect(page).toHaveURL(/\/dashboard/);
+    await registerAndLoginLearner(page, userEmail, 'Usage Tester');
 
     // Create a completed chat with real usage metadata in DB
     const user = await prisma.user.findFirst({ where: { email: userEmail.toLowerCase() } });
@@ -450,13 +445,7 @@ test.describe('Part 4 & 8: Comprehensive Ask-AI End-to-End Suite (27 Browser Sce
     page,
   }) => {
     // Authenticate
-    await page.goto('/auth/signup');
-    await page.fill('#signup-name', 'Duplicate Tester');
-    await page.fill('#signup-email', userEmail);
-    await page.fill('#signup-password', VALID_PASSWORD);
-    await page.fill('#signup-confirm-password', VALID_PASSWORD);
-    await page.click('button:has-text("Create account")');
-    await expect(page).toHaveURL(/\/dashboard/);
+    await registerAndLoginLearner(page, userEmail, 'Duplicate Tester');
 
     await page.goto('/dashboard/ask');
     await page.locator('button:has-text("Slot 1")').first().click();
@@ -515,13 +504,7 @@ test.describe('Part 4 & 8: Comprehensive Ask-AI End-to-End Suite (27 Browser Sce
 
   test('Scenario 18: Daily limit display safe 429 message test', async ({ page }) => {
     // Authenticate
-    await page.goto('/auth/signup');
-    await page.fill('#signup-name', 'Daily Limit Tester');
-    await page.fill('#signup-email', userEmail);
-    await page.fill('#signup-password', VALID_PASSWORD);
-    await page.fill('#signup-confirm-password', VALID_PASSWORD);
-    await page.click('button:has-text("Create account")');
-    await expect(page).toHaveURL(/\/dashboard/);
+    await registerAndLoginLearner(page, userEmail, 'Daily Limit Tester');
 
     // Mock Gemini external provider
     await page.route('**/api/v1/ai/providers', async (route) => {
@@ -580,13 +563,7 @@ test.describe('Part 4 & 8: Comprehensive Ask-AI End-to-End Suite (27 Browser Sce
 
   test('Scenario 19: Concurrency ceiling safe 429 message test', async ({ page }) => {
     // Authenticate
-    await page.goto('/auth/signup');
-    await page.fill('#signup-name', 'Concurrency Tester');
-    await page.fill('#signup-email', userEmail);
-    await page.fill('#signup-password', VALID_PASSWORD);
-    await page.fill('#signup-confirm-password', VALID_PASSWORD);
-    await page.click('button:has-text("Create account")');
-    await expect(page).toHaveURL(/\/dashboard/);
+    await registerAndLoginLearner(page, userEmail, 'Concurrency Tester');
 
     // Mock Gemini external provider
     await page.route('**/api/v1/ai/providers', async (route) => {
@@ -715,13 +692,7 @@ test.describe('Part 4 & 8: Comprehensive Ask-AI End-to-End Suite (27 Browser Sce
 
   test('Scenario 25: Dark mode renders correctly across Ask workspace', async ({ page }) => {
     // Authenticate
-    await page.goto('/auth/signup');
-    await page.fill('#signup-name', 'Theme Tester');
-    await page.fill('#signup-email', userEmail);
-    await page.fill('#signup-password', VALID_PASSWORD);
-    await page.fill('#signup-confirm-password', VALID_PASSWORD);
-    await page.click('button:has-text("Create account")');
-    await expect(page).toHaveURL(/\/dashboard/);
+    await registerAndLoginLearner(page, userEmail, 'Theme Tester');
 
     await page.goto('/dashboard/ask');
 

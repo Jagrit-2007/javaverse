@@ -9,7 +9,7 @@ import { POST as handleLogout } from '@/app/api/v1/auth/logout/route';
 
 import { getRedisCacheClient } from '@/lib/redis';
 
-const VALID_PASSWORD = 'MemberP@ssw0rd!2026';
+const VALID_PASSWORD = 'LearnerP@ssw0rd!2026';
 
 function createSignupRequest(body: Record<string, unknown>, ip = '127.0.0.1') {
   const csrfToken = createCsrfToken({ flow: 'signup' });
@@ -46,7 +46,7 @@ function extractRawSessionToken(response: Response): string | null {
   return match ? match[1]! : null;
 }
 
-describe('Local-First 5-Account Model & Member Signup Invariants', () => {
+describe('Local-First 5-Account Model & Learner Signup Invariants', () => {
   beforeEach(async () => {
     assertSafeTestDatabase(process.env.DATABASE_URL);
     // Flush redis rate limiters
@@ -61,7 +61,7 @@ describe('Local-First 5-Account Model & Member Signup Invariants', () => {
     await prisma.user.deleteMany();
   });
 
-  it('signs up when zero users exist, creates a learner account, and creates a valid session', async () => {
+  it('signs up when zero users exist, creates a learner account without a session, and subsequent login succeeds', async () => {
     const userCountBefore = await prisma.user.count();
     expect(userCountBefore).toBe(0);
 
@@ -81,21 +81,97 @@ describe('Local-First 5-Account Model & Member Signup Invariants', () => {
     const data = await res.json();
     expect(data.data.user.displayName).toBe('First Learner');
     expect(data.data.user.email).toBe('learner1@example.local');
+    expect(data.data.requiresSignIn).toBe(true);
 
-    // Verify raw session token in Set-Cookie header
+    // Verify NO raw session token in Set-Cookie header
     const rawToken = extractRawSessionToken(res);
-    expect(rawToken).not.toBeNull();
+    expect(rawToken).toBeNull();
 
-    // Verify session resolves in DB
-    const sessionCtx = await resolveSession(rawToken);
-    expect(sessionCtx).not.toBeNull();
-    expect(sessionCtx?.user.email).toBe('learner1@example.local');
+    // Verify 0 session rows in DB after signup
+    const sessionCount = await prisma.session.count();
+    expect(sessionCount).toBe(0);
 
     // Verify DB user record
     const dbUser = await prisma.user.findUnique({
       where: { email: 'learner1@example.local' },
     });
     expect(dbUser?.status).toBe('ACTIVE');
+
+    // Separate call to login with same credentials succeeds, returns session cookie, and creates session
+    const loginReq = createLoginRequest(
+      {
+        email: 'learner1@example.local',
+        password: VALID_PASSWORD,
+      },
+      '10.0.0.1',
+    );
+    const loginRes = await handleLogin(loginReq);
+    expect(loginRes.status).toBe(200);
+
+    const loginToken = extractRawSessionToken(loginRes);
+    expect(loginToken).not.toBeNull();
+
+    const sessionCtx = await resolveSession(loginToken);
+    expect(sessionCtx).not.toBeNull();
+    expect(sessionCtx?.user.email).toBe('learner1@example.local');
+
+    const sessionCountAfterLogin = await prisma.session.count();
+    expect(sessionCountAfterLogin).toBe(1);
+  });
+
+  it('rejects signup with ALREADY_AUTHENTICATED 400 when active session cookie is supplied', async () => {
+    // 1. Create a user and sign in to get an active session
+    const signupReq = createSignupRequest({
+      displayName: 'Existing User',
+      email: 'existing@example.local',
+      password: VALID_PASSWORD,
+      confirmPassword: VALID_PASSWORD,
+    });
+    const sRes = await handleSignup(signupReq);
+    expect(sRes.status).toBe(201);
+
+    const lRes = await handleLogin(
+      createLoginRequest({
+        email: 'existing@example.local',
+        password: VALID_PASSWORD,
+      }),
+    );
+    expect(lRes.status).toBe(200);
+    const activeToken = extractRawSessionToken(lRes);
+    expect(activeToken).not.toBeNull();
+
+    // 2. Attempt signup while sending active session cookie
+    const csrfToken = createCsrfToken({ flow: 'signup' });
+    const blockedReq = new NextRequest('http://localhost:3000/api/v1/auth/signup', {
+      method: 'POST',
+      headers: {
+        origin: 'http://localhost:3000',
+        'Content-Type': 'application/json',
+        'x-csrf-token': csrfToken,
+        'x-forwarded-for': '10.0.0.99',
+        cookie: `${SESSION_COOKIE_NAME}=${activeToken}`,
+      },
+      body: JSON.stringify({
+        displayName: 'Another User',
+        email: 'another@example.local',
+        password: VALID_PASSWORD,
+        confirmPassword: VALID_PASSWORD,
+      }),
+    });
+
+    const blockedRes = await handleSignup(blockedReq);
+    expect(blockedRes.status).toBe(400);
+    const body = await blockedRes.json();
+    expect(body.error.code).toBe('ALREADY_AUTHENTICATED');
+    expect(body.error.message).toBe(
+      'An account is already signed in. Sign out before creating another account.',
+    );
+
+    // Verify 'another@example.local' was NOT created
+    const notCreated = await prisma.user.findUnique({
+      where: { email: 'another@example.local' },
+    });
+    expect(notCreated).toBeNull();
   });
 
   it('safely rejects duplicate normalized emails regardless of case or whitespace', async () => {
@@ -336,7 +412,7 @@ describe('Local-First 5-Account Model & Member Signup Invariants', () => {
     const req1 = createSignupRequest(
       {
         displayName: 'Account 1',
-        email: 'member1@example.local',
+        email: 'learner1@example.local',
         password: VALID_PASSWORD,
         confirmPassword: VALID_PASSWORD,
       },
@@ -350,7 +426,7 @@ describe('Local-First 5-Account Model & Member Signup Invariants', () => {
       const req = createSignupRequest(
         {
           displayName: `Account ${i}`,
-          email: `member${i}@example.local`,
+          email: `learner${i}@example.local`,
           password: VALID_PASSWORD,
           confirmPassword: VALID_PASSWORD,
         },
@@ -364,7 +440,7 @@ describe('Local-First 5-Account Model & Member Signup Invariants', () => {
     const req5 = createSignupRequest(
       {
         displayName: 'Account 5',
-        email: 'member5@example.local',
+        email: 'learner5@example.local',
         password: VALID_PASSWORD,
         confirmPassword: VALID_PASSWORD,
       },
@@ -373,8 +449,8 @@ describe('Local-First 5-Account Model & Member Signup Invariants', () => {
     const res5 = await handleSignup(req5);
     expect(res5.status).toBe(201);
 
-    const user1 = await prisma.user.findUnique({ where: { email: 'member1@example.local' } });
-    const user5 = await prisma.user.findUnique({ where: { email: 'member5@example.local' } });
+    const user1 = await prisma.user.findUnique({ where: { email: 'learner1@example.local' } });
+    const user5 = await prisma.user.findUnique({ where: { email: 'learner5@example.local' } });
 
     expect(user1).not.toBeNull();
     expect(user5).not.toBeNull();

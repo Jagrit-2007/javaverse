@@ -150,7 +150,7 @@ describe('Complete Theme Architecture & Invariants', () => {
 
   describe('Authenticated Settings API Persistence & Validation', () => {
     it('persists authenticated user theme choice in PostgreSQL and rejects invalid values', async () => {
-      // 1. Create authenticated member
+      // 1. Create authenticated learner
       const user = await prisma.user.create({
         data: {
           email: 'theme-user@example.local',

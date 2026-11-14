@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
-import { assertSafeTestDatabase } from '@javaverse/db';
+import { assertSafeTestDatabase, getDatabaseNameFromUrl } from '@javaverse/db';
 
 const TEST_DATABASE_URL =
   process.env.TEST_DATABASE_URL ||
@@ -15,6 +15,12 @@ process.env.APP_MASTER_KEY = TEST_MASTER_KEY;
 
 // Strict safety guard: Assert safe test database before initializing test runner
 assertSafeTestDatabase(TEST_DATABASE_URL);
+const targetTestDb = getDatabaseNameFromUrl(TEST_DATABASE_URL);
+if (targetTestDb === 'javaverse') {
+  throw new Error(
+    'CRITICAL DATA-SAFETY VIOLATION: Playwright cannot target development database "javaverse"',
+  );
+}
 
 export default defineConfig({
   testDir: './test/e2e',
@@ -40,7 +46,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `sh -c "DATABASE_URL='${TEST_DATABASE_URL}' APP_MASTER_KEY='${TEST_MASTER_KEY}' pnpm --filter @javaverse/worker run dev & DATABASE_URL='${TEST_DATABASE_URL}' APP_MASTER_KEY='${TEST_MASTER_KEY}' ALLOW_LOCAL_SERVICES_IN_PRODUCTION=true pnpm run start"`,
+    command: `sh -c "node -e 'const u = new URL(process.env.DATABASE_URL || \\\"\\\"); const db = u.pathname.replace(/^\\/+/, \\\"\\\").split(\\\"?\\\")[0]; if (db === \\\"javaverse\\\") { console.error(\\\"Playwright webServer refusing to run on javaverse\\\"); process.exit(1); }' && DATABASE_URL='${TEST_DATABASE_URL}' APP_MASTER_KEY='${TEST_MASTER_KEY}' pnpm --filter @javaverse/worker run dev & DATABASE_URL='${TEST_DATABASE_URL}' APP_MASTER_KEY='${TEST_MASTER_KEY}' ALLOW_LOCAL_SERVICES_IN_PRODUCTION=true pnpm run start"`,
     url: 'http://localhost:3000',
     reuseExistingServer: false,
     timeout: 60 * 1000,

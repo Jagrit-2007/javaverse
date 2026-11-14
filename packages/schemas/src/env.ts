@@ -31,7 +31,6 @@ export const EnvSchema = z
     SANDBOX_SHARED_SECRET: z.string().min(32),
 
     MAX_USERS: z.coerce.number().int().positive().default(5),
-    REGISTRATION_MODE: z.enum(['invite_only', 'open', 'closed']).default('open'),
     TRUSTED_PROXY_IPS: z.string().default(''),
     HIBP_ENFORCEMENT_MODE: z.enum(['degraded', 'strict']).default('degraded'),
 
@@ -108,7 +107,8 @@ export const EnvSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['SANDBOX_PROVIDER'],
-        message: 'Phase 1 runtime policy strictly requires SANDBOX_PROVIDER=mock',
+        message:
+          'Runtime policy strictly requires SANDBOX_PROVIDER=mock (container_runner remains REJECTED)',
       });
     }
 

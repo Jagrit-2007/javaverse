@@ -4,7 +4,7 @@ import { validateCsrf } from '@/lib/csrf';
 import { getSessionFromRequest, generateSessionTokens } from '@/lib/auth';
 import { deriveTokenDigest } from '@javaverse/security';
 import { getServerKeys } from '@/lib/keys';
-import { sendOwnerVerificationEmail } from '@/lib/email';
+import { sendVerificationEmail } from '@/lib/email';
 import { checkRateLimit, getClientIp } from '@/lib/rateLimiter';
 import { jsonOk, jsonError } from '@/lib/apiResponse';
 
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     },
   });
 
-  sendOwnerVerificationEmail({ email: sessionCtx.user.email, token: rawToken }).catch((err) => {
+  sendVerificationEmail({ email: sessionCtx.user.email, token: rawToken }).catch((err) => {
     console.error('Failed to send verification email:', err);
   });
 

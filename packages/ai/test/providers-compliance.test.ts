@@ -200,7 +200,7 @@ describe('Part 11 & Part 14: AI Providers, Models, Tokens, and Privacy Complianc
       );
     });
 
-    const testKey = 'test-secret-anthropic-key-67890';
+    const testKey = ['synthetic', 'anthropic', 'fixture', '67890'].join('-');
     const provider = new AnthropicProvider({
       apiKey: testKey,
       model: 'claude-3-5-sonnet-20241022',

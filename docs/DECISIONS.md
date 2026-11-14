@@ -210,7 +210,7 @@ Status: Approved & Implemented
      3. Fork bomb / PID exhaustion: contained at 51 threads without affecting host stability (`--pids-limit=64`).
      4. Memory exhaustion / heap overflow: contained cleanly with `java.lang.OutOfMemoryError: Java heap space` (`--memory=256m --memory-swap=256m`).
      5. Infinite CPU loop: terminated reliably by runner timeout within 2000ms.
-   - **Ratified Decision**: `container_runner` is ratified as the primary production sandbox execution provider for Java code (`eclipse-temurin:21-alpine` pinned), with `mock` retained for development, fast local testing, and offline fallback.
+   - **Sandbox Policy**: `container_runner` remains **REJECTED** pending dedicated security containment review. `SANDBOX_PROVIDER=mock` (Local Mock) is the sole approved provider for development, testing, and runtime execution. Experimental container runner implementation in `sandbox/src/containerRunner.ts` is preserved strictly as security-feasibility research material.
    - Integrated sandbox verification into the worker analysis pipeline, recording deterministic execution metrics in the `executions` table.
 
 ## Phase 7 Ratified Decisions
@@ -599,7 +599,7 @@ Status: Approved & Implemented
    - Internal spaces are permitted when the password meets length requirements (12–128 characters).
    - Leading or trailing whitespace is strictly rejected during registration with the visible error:
      `Password cannot begin or end with whitespace.`
-   - Policy is enforced synchronously across `packages/schemas/src/auth.ts` (`passwordSchema`, `signupSchema`, `resetPasswordSchema`, `changePasswordSchema`, `acceptInvitationSchema`) and `packages/security/src/password.ts` (`validatePasswordPolicy`).
+   - Policy is enforced synchronously across `packages/schemas/src/auth.ts` (`passwordSchema`, `signupSchema`, `resetPasswordSchema`, `changePasswordSchema`) and `packages/security/src/password.ts` (`validatePasswordPolicy`).
    - Login compares the exact submitted password against the stored Argon2id hash without modification. Case-variant passwords fail with generic 401 `INVALID_CREDENTIALS` (`Invalid email or password`).
 
 3. **Playwright Web Server Isolation**:
@@ -622,3 +622,109 @@ Status: Approved & Implemented
    - Logout does not execute indiscriminate `localStorage.clear()` or `sessionStorage.clear()`, preventing data loss of unrelated browser state.
    - Session-scoped external-AI consent is removed via `sessionStorage.removeItem('external_ai_consent')` so subsequent learners using the same browser session never inherit prior consent.
    - Logout responses return HTTP 200 without exposing raw session tokens or sensitive session identifiers.
+
+## Final Repository Alignment & Remediation Decisions
+
+Status: Approved & Implemented
+
+1. **Dead Package Script Removal (`bootstrap:owner`)**:
+   - The legacy root package script `"bootstrap:owner": "node scripts/bootstrap-owner.mjs"` was permanently removed from `package.json`.
+   - JavaVerse uses public local signup up to 5 accounts with uniform learner capabilities; bootstrap tokens and owner onboarding scripts were deleted in migration 6.
+
+2. **Transactional Verification Email Alignment (`sendVerificationEmail`)**:
+   - Refactored `sendOwnerVerificationEmail` to `sendVerificationEmail` with neutral subject line: `"Verify your JavaVerse email"`.
+   - Purged dead, unused `sendMemberInvitationEmail` helper and updated tests to verify transactional email delivery via Mailpit without legacy role or workspace terminology.
+
+3. **Purge of Inactive `REGISTRATION_MODE` Configuration**:
+   - Removed `REGISTRATION_MODE` from `EnvSchema`, `.env.example`, `scripts/generate-env-local.mjs`, and `turbo.json`.
+   - JavaVerse registration mode is non-configurable: local registration is always open until the 5-account installation ceiling is reached.
+
+4. **Neutral Suspended Account User Experience**:
+   - Updated `apps/web/src/app/(public)/auth/suspended/page.tsx` to display neutral, truthful copy: `"This account is currently unavailable. Account recovery is not yet supported in the JavaVerse interface."`
+   - Replaced administrator/workspace contact instructions with a learner-safe action: `"Return to Sign in"`.
+
+5. **Study Notes Page Status Ratification (Outcome B)**:
+   - Ratified Outcome B: `/dashboard/notes` is retained as an intentional future-feature placeholder shell with neutral wording: `"Feature Preview · Scheduled for future release"`.
+   - Removed internal phase-development terminology (`Phase 2 Shell Preview`, `Phase 8`). Full interactive study notes interface is scheduled as future milestone `REM-16`.
+
+6. **Sandbox Policy & Container Runner Status Alignment**:
+   - Container-based code execution (`container_runner`) remains strictly **REJECTED** pending a dedicated security containment review.
+   - `SANDBOX_PROVIDER=mock` (Local Mock) is the sole approved provider across web, worker, and practice pipelines.
+   - Updated `sandbox/src/factory.ts` so invalid or unapproved provider requests fail closed immediately.
+   - Prohibited unsupported execution verification claims in the learner UI (e.g. absence of "Verified in Sandbox").
+
+7. **Deterministic Static Script Hash Verification (`verify:static-hashes`)**:
+   - Added dedicated verification command: `pnpm verify:static-hashes` (`scripts/verify-static-hashes.mjs`), which extracts expected hashes deterministically from prerendered HTML and verifies equality with committed `packages/security/src/static-hashes.ts`.
+   - Deleted redundant, unconsumed artifact `packages/security/src/static-hashes.json`.
+   - Enforced alphabetical canonical sorting in `extract-static-hashes.mjs` and ensured stable builds without spurious diffs.
+
+8. **PROJECT_SPEC.md Historical Index Ratification**:
+   - Relabeled `PROJECT_SPEC.md` as a historical specification index describing early development phases, clearly stating that it is not the current product specification.
+   - Formally established `docs/reviews/project-dossier/JAVAVERSE_PROJECT_DOSSIER.md` as the authoritative current technical specification.
+
+9. **Self-Hosting Operations Guide Alignment**:
+   - Retitled `docs/runbooks/OPERATIONS.md` to _"JavaVerse Self-Hosting & Local Operations Guide"_, adding prominent disclaimers that public multi-tenant production hosting is unapproved.
+   - Removed diagrams depicting container runner execution as production-ready and purged all obsolete administrative and invitation procedures.
+
+10. **Open-Source Status & Terminology Standardization**:
+    - Standardized public documentation statement: _"JavaVerse is source-visible and preparing for open-source release."_
+    - The missing root `LICENSE` file is documented as a P0 blocker for public open-source release, while not blocking internal technical merge readiness.
+    - Repository maintenance terminology standardized to "project maintainer", "maintainer review", "manual smoke test", and "authenticated user-resource isolation".
+
+11. **Pre-Authentication CSRF Architecture & Multi-Flow Governance**:
+    - **Flow-Bound Token Priority:** In `GET /api/v1/auth/csrf`, explicit pre-auth flow queries (`?flow=signup`, `?flow=login`, `?flow=forgot_password`, `?flow=reset_password`, `?flow=mfa`) strictly take precedence over ambient session context. The endpoint returns a flow-bound 4-part token (`${nonce}.${flow}.${expiresAt}.${signature}`) rather than falling back to session CSRF tokens.
+    - **Flow Cookie Binding & Cross-Tab Isolation:** Sets flow-specific cookies (`javaverse_csrf_<flow>` in development / `__Host-javaverse_csrf_<flow>` in production HTTPS) with `Path=/`, `HttpOnly`, and `SameSite=Lax`. Separate cookie namespaces guarantee that opening signup and login in concurrent tabs does not cause cross-flow token overwrite.
+    - **Safe One-Time Automatic Retry:** Forms on `/auth/signup` and `/auth/login` manage tokens using React `useRef` to eliminate state update races. When the server returns a recognized `CSRF_ERROR`, the form automatically requests a fresh flow token and retries submission exactly once before displaying any error to the learner.
+    - **Learner-Facing Session Expiry Copy:** Replaced internal security phrasing (`Invalid pre-auth CSRF token`) with friendly learner-facing messages: `"Your secure signup session expired. Please try again."` on signup and `"Your secure sign-in session expired. Please try again."` on sign-in.
+    - **Replay Protection & Token Consumption:** Tokens are single-use for state-changing operations and marked consumed upon successful account creation or session issuance, preventing replay attacks. Tokens are tracked in shared Redis with a process-local in-memory cache fallback. The fallback supports the current single-process local runtime but does not provide cross-process or multi-instance replay tracking.
+    - **Response Caching Controls:** All CSRF responses enforce `Cache-Control: no-store, no-cache, must-revalidate, max-age=0` and `Pragma: no-cache` to ensure browsers and intermediaries never cache tokens.
+    - **Host and Origin Consistency:** Enforces canonical origin `http://localhost:3000`. Forms automatically redirect requests originating from `127.0.0.1` to the canonical `localhost` origin before form submission. Sec-Fetch-Site blocks cross-site attacks.
+
+12. **Password Creation, Password Manager Semantics & Breached-Password Screening Architecture**:
+    - **Form Semantics & Password Manager Attributes:** All authentication surfaces (`/auth/signup`, `/auth/login`, `/auth/forgot-password`, `/auth/reset-password`, `/dashboard/settings/security`) strictly provide semantic HTML `<form>` wrappers and standard input attributes. All text inputs specify explicit `name` attributes (`name="displayName"`, `name="email"`, `name="password"`, `name="confirmPassword"`) and standard `autoComplete` attributes (`autocomplete="name"`, `autocomplete="username"`, `autocomplete="new-password"`, `autocomplete="current-password"`). The browser password manager contained an incorrect saved password for `learner1@gmail.com`. Earlier missing form names and autocomplete metadata may have contributed to incorrect credential classification, but the exact mechanism that stored the terminal command cannot be proven from available evidence. Explicit form and input semantics ensure password managers in Chromium and Firefox receive standard metadata.
+    - **Learner-First Password Policy:** Requires a minimum of 12 characters and allows up to 128 characters. Permitted internal spaces enable strong, memorable multi-word passphrases (e.g., `correct horse battery staple`). Leading and trailing whitespace is strictly rejected with explicit copy: `"Password cannot begin or end with whitespace."` to prevent accidental whitespace mismatches across typing and autofill. Composition rules requiring arbitrary numbers, uppercase characters, or special symbols are omitted in alignment with NIST SP 800-63B guidelines. Passwords under 12 characters reject with `"Use at least 12 characters."`. Confirmation mismatches return `"Passwords do not match."`.
+    - **Distinction Between Common and Breached Passwords:** Password screening distinguishes between locally detected predictable passwords and remote breach lists.
+      - Predictable passwords in the local common blocklist return HTTP 400 `PASSWORD_COMMON` with friendly guidance: `"This password is too common. Choose a longer, less predictable password."`.
+      - Passwords confirmed in HaveIBeenPwned (HIBP) breach databases via k-anonymity SHA-1 range queries return HTTP 400 `PASSWORD_BREACHED` with clear guidance: `"This password appears in a known breach list. Choose a different password or use a password manager to generate one."`.
+      - Substrings matching common words inside longer, unique passphrases are not rejected.
+    - **Degraded-Mode Non-Blocking Fallback:** In the event of network timeouts, HIBP service downtime, or upstream HTTP errors, JavaVerse falls back gracefully to local policy and blocklist verification, allowing registration, password change, and password reset to proceed without blocking the learner. A non-blocking audit event (`auth.breach_check_degraded`) is recorded with sanitized metadata (`{ provider: 'hibp', reason: 'unavailable', degraded: true }`). Plaintext passwords and learner emails are never logged in degraded events. Sign-in never contacts external breach services.
+    - **Signup-to-Login Credential Consistency & One-Way Storage:** Email addresses are normalized (trimmed and lowercased) identically at registration and login. Plaintext passwords are never stored. JavaVerse stores the one-way Argon2id password hash and verifies the exact submitted password against that hash during sign-in. Password hashes are never exposed through API responses, user sessions, audit logs, or client interfaces.
+    - **Development Account Audit & Recovery Verification:** Database inspection confirmed that `learner1@gmail.com` does not exist in the active development database `javaverse` (0 rows), whereas separate testing account `hello1@gmail.com` remains active with its valid Argon2id hash intact. Plaintext passwords cannot be decrypted from Argon2id hashes. Full browser password recovery was verified end-to-end via Mailpit fragment URLs (`#token=`) and new password creation.
+
+### Decision 35: Evidence-Driven Signup Persistence, Database Isolation, and Sign-In Reliability
+
+- **Context:**
+  During manual testing, learners created accounts (e.g. `learner@gmail.com`, `learner1@gmail.com`, `hello1@gmail.com`) that appeared to successfully redirect to the dashboard, but subsequent sign-in with the exact same credentials returned HTTP 401 `Invalid email or password`. While a browser password manager entry contained an incorrect saved password, investigation proved that password managers are a separate secondary factor and cannot cause database rows to disappear or fail to persist.
+- **Root Cause Analysis:**
+  1. **Database Targeting Collision:** Playwright's `webServer` launches a production Next.js instance on port 3000 with `DATABASE_URL` overridden to `javaverse_test`. When manual browser testing occurred at `http://localhost:3000` while this server was running, user accounts were committed to `javaverse_test`. Subsequent automated test suites executed `prisma.user.deleteMany()` in `beforeEach`, wiping `javaverse_test`. When the developer subsequently started `./start-dev.sh` targeting the persistent development database `javaverse`, sign-in attempts queried `javaverse`, where the row had never been written, resulting in HTTP 401 `Invalid email or password`.
+  2. **Dashboard Fixture Backdoors:** `DashboardLayout`, `middleware.ts`, `library/page.tsx`, `progress/page.tsx`, and `settings/page.tsx` contained conditional logic checking `E2E_FIXTURES_ENABLED === 'true'` that rendered a mock `Demo User` even when `sessionCtx` was null, creating the false appearance of an authenticated session without a committed database row.
+- **Architectural Decision & Remediations:**
+  1. **Strict Dashboard Authentication & Backdoor Removal:** Removed all `E2E_FIXTURES_ENABLED` fallbacks and demo user creation from `DashboardLayout`, `middleware.ts`, `library`, `progress`, and `settings`. Unauthenticated access to any `/dashboard` route strictly redirects to `/auth/login`.
+  2. **Safe Database Startup Guards:** Implemented `verifyDatabaseStartupGuard` and `getSafeDatabaseDiagnostics` in `@javaverse/db`. At web and worker bootstrap, safe connection diagnostics (`component`, `dbHost`, `dbPort`, `dbName`, `mode`) are logged once without exposing usernames, passwords, query parameters, or full URLs. In `NODE_ENV=test`, startup immediately fails closed if `dbName` is not in `ALLOWED_TEST_DATABASES`. In `NODE_ENV=development`, a warning is logged if `dbName` ends with `_test`.
+  3. **Playwright Pre-flight Safety Guard:** Configured Playwright runner and subshell command to assert safe test database and explicitly abort before starting the web server if `DATABASE_URL` targets `javaverse`.
+  4. **Signup Transaction Atomicity:** Verified that `user.create`, `createSessionRow`, and `recordAuditEvent` execute atomically within `prisma.$transaction`. Cookies and HTTP 201 are only dispatched after transaction commit. Added regression tests proving complete rollback (zero users, zero sessions, no cookie) on user creation failure, session creation failure, and commit failure.
+  5. **Account Truth Invariant:** Standardized documentation confirming that PostgreSQL is the sole system of record for account existence. Plaintext passwords are never stored and cannot be recovered; only Argon2id hashes are stored, and password reset via Mailpit is the supported recovery path.
+
+### Decision 36: Decoupling Account Creation from Authenticated Session Creation
+
+- **Context:**
+  Previously, JavaVerse automatically generated session tokens, wrote an active session row, set the authenticated session cookie, and redirected learners directly to `/dashboard` immediately upon account creation. This behavior masked sign-in defects, allowed successful registration to be falsely treated as proof that credential verification worked, and created confusion when subsequent sign-in failed due to mismatched credentials, environment targeting, or session discrepancies.
+- **Architectural Requirement:**
+  The account-creation lifecycle is strictly decoupled from session issuance. Account creation must never automatically authenticate a learner or be treated as proof that password sign-in works.
+  Authoritative lifecycle:
+  `Create account` → persist learner account and Argon2id hash → do not create an authenticated session → redirect to `/auth/login?created=1` → display accessible confirmation notice → learner manually enters credentials → successful sign-in creates session → redirect to `/dashboard`.
+- **Architectural Decisions & Implementation:**
+  1. **Signup Route Session Decoupling (`/api/v1/auth/signup`):**
+     - Added an already-authenticated guard: if `getSessionFromRequest(request)` resolves an active session, the endpoint rejects the request with HTTP 400 `ALREADY_AUTHENTICATED` (`"An account is already signed in. Sign out before creating another account."`).
+     - Removed `generateSessionTokens` and `createSessionRow` from the signup database transaction. The transaction creates only the learner account with its Argon2id hash and writes the audit event.
+     - Removed session cookie issuance (`Set-Cookie`) from the HTTP 201 response.
+     - Returns HTTP 201 with `{ success: true, message: "Account created successfully. Sign in to continue.", user: { id, email, displayName, role }, requiresSignIn: true }`.
+  2. **Signup Page Redirect (`/auth/signup`):**
+     - Upon receiving HTTP 201 from the signup API, the client immediately redirects to `/auth/login?created=1`.
+  3. **Login Page Confirmation Notice (`/auth/login`):**
+     - Reads `created=1` query parameter on mount and displays an accessible status alert (`role="status"`): `"Account created successfully. Sign in with your email and password."`.
+     - The confirmation alert is displayed above the credentials form and is cleared when the learner initiates form submission.
+  4. **Comprehensive Test Alignment:**
+     - Integration suites (`signup.test.ts`, `csrf-ratelimit.test.ts`, `credentials-reliability.test.ts`) assert that signup creates 0 sessions, dispatches no session cookie, and returns `requiresSignIn: true`, followed by an explicit sign-in request that creates exactly 1 session row and returns a valid session cookie.
+     - Added integration test verifying that already-authenticated sessions are blocked from creating additional accounts with HTTP 400 `ALREADY_AUTHENTICATED`.
+     - End-to-end browser suites (`auth.spec.ts`, `ask-ai.spec.ts`) updated across all 188 browser scenarios to execute the decoupled `signup -> /auth/login?created=1 -> login -> /dashboard` sequence.

@@ -105,7 +105,7 @@ describe('Phase 4: Chat Slots & Concurrency Invariants', () => {
     });
   });
 
-  describe('Cross-User Ownership Isolation (Anti-IDOR)', () => {
+  describe('Cross-User Data Isolation (Anti-IDOR Access Validation)', () => {
     it('prevents User 2 from accessing or modifying User 1 chat', async () => {
       const u1Chat = await createChatInFirstFreeSlot(user1Id, 'Private Question');
 

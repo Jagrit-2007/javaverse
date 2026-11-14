@@ -15,26 +15,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const sessionCtx = await resolveSession(sessionToken);
 
   if (!sessionCtx) {
-    if (process.env.E2E_FIXTURES_ENABLED === 'true') {
-      const mockUser = {
-        displayName: 'Demo User',
-        email: 'demo@javaverse.local',
-      };
-      return (
-        <div className={styles.layoutWrapper}>
-          <Sidebar user={mockUser} />
-          <div className={styles.contentColumn}>
-            <MobileNav />
-            <div className={styles.topBarWrapper}>
-              <TopBar user={mockUser} />
-            </div>
-            <main id="main-content" tabIndex={-1} className={styles.mainCanvas}>
-              {children}
-            </main>
-          </div>
-        </div>
-      );
-    }
     redirect('/auth/login');
   }
 

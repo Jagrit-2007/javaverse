@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui/Input';
@@ -13,68 +13,101 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [csrfToken, setCsrfToken] = useState('');
+  const [_csrfToken, setCsrfToken] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [createdNotice, setCreatedNotice] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  const csrfTokenRef = useRef<string>('');
+
+  const fetchCsrfToken = async (): Promise<string> => {
+    try {
+      const res = await fetch('/api/v1/auth/csrf?flow=login', {
+        cache: 'no-store',
+        headers: { Pragma: 'no-cache' },
+      });
+      const data = await res.json();
+      const token = data?.data?.csrfToken || '';
+      if (token) {
+        csrfTokenRef.current = token;
+        setCsrfToken(token);
+      }
+      return token;
+    } catch {
+      return '';
+    }
+  };
+
   useEffect(() => {
+    // Canonical host enforcement: redirect 127.0.0.1 to localhost before form interaction
+    if (typeof window !== 'undefined' && window.location.hostname === '127.0.0.1') {
+      const canonicalUrl = window.location.href.replace('//127.0.0.1:', '//localhost:');
+      window.location.replace(canonicalUrl);
+      return;
+    }
+
     if (typeof window !== 'undefined') {
       const sp = new URLSearchParams(window.location.search);
       const ret = sp.get('returnUrl');
       if (ret && ret.startsWith('/dashboard')) {
         setReturnUrl(ret);
       }
+      if (sp.get('created') === '1' || sp.get('created') === 'true') {
+        setCreatedNotice(true);
+      }
     }
 
-    fetch('/api/v1/auth/csrf?flow=login')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data?.data?.csrfToken) {
-          setCsrfToken(data.data.csrfToken);
-        }
-      })
-      .catch(() => {});
+    fetchCsrfToken();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
     setError(null);
+    setCreatedNotice(false);
     setSubmitting(true);
 
     try {
-      let activeCsrfToken = csrfToken;
+      let activeCsrfToken = csrfTokenRef.current;
       if (!activeCsrfToken) {
-        try {
-          const csrfRes = await fetch('/api/v1/auth/csrf?flow=login');
-          const csrfData = await csrfRes.json();
-          activeCsrfToken = csrfData?.data?.csrfToken || '';
-          if (activeCsrfToken) {
-            setCsrfToken(activeCsrfToken);
-          }
-        } catch {
-          // Fall through to request attempt
+        activeCsrfToken = await fetchCsrfToken();
+      }
+
+      const submitLogin = async (token: string) => {
+        return fetch('/api/v1/auth/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-csrf-token': token,
+          },
+          body: JSON.stringify({ email: email.trim(), password }),
+        });
+      };
+
+      let res = await submitLogin(activeCsrfToken);
+      let data = await res.json().catch(() => null);
+
+      // Safe one-time automatic retry on recognized pre-auth CSRF failure
+      if (!res.ok && data?.error?.code === 'CSRF_ERROR') {
+        const freshToken = await fetchCsrfToken();
+        if (freshToken) {
+          res = await submitLogin(freshToken);
+          data = await res.json().catch(() => null);
         }
       }
 
-      const res = await fetch('/api/v1/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-csrf-token': activeCsrfToken,
-        },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await res.json();
       if (!res.ok) {
-        setError(data?.error?.message || 'Invalid email or password');
+        if (data?.error?.code === 'CSRF_ERROR') {
+          setError('Your secure sign-in session expired. Please try again.');
+        } else {
+          setError(data?.error?.message || 'Invalid email or password');
+        }
         return;
       }
 
       if (data?.data?.mfaRequired) {
         router.push('/auth/mfa');
       } else {
-        // Safe relative redirect
         const safeDestination = returnUrl.startsWith('/dashboard') ? returnUrl : '/dashboard';
         window.location.href = safeDestination;
       }
@@ -95,6 +128,12 @@ export default function LoginPage() {
           </p>
         </div>
 
+        {createdNotice && (
+          <div role="status" className={`${styles.alertBox} ${styles.alertSuccess}`}>
+            Account created successfully. Sign in with your email and password.
+          </div>
+        )}
+
         {error && (
           <div role="alert" className={`${styles.alertBox} ${styles.alertError}`}>
             {error}
@@ -104,17 +143,19 @@ export default function LoginPage() {
         <form method="POST" onSubmit={handleSubmit} className={styles.authForm} noValidate>
           <Input
             id="login-email"
+            name="email"
             type="email"
             label="Email address"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            autoComplete="email"
+            autoComplete="username"
             disabled={submitting}
           />
 
           <Input
             id="login-password"
+            name="password"
             type="password"
             label="Password"
             value={password}

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -11,68 +11,97 @@ export default function SignupPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [csrfToken, setCsrfToken] = useState('');
+  const [_csrfToken, setCsrfToken] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const csrfTokenRef = useRef<string>('');
+
+  const fetchCsrfToken = async (): Promise<string> => {
+    try {
+      const res = await fetch('/api/v1/auth/csrf?flow=signup', {
+        cache: 'no-store',
+        headers: { Pragma: 'no-cache' },
+      });
+      const data = await res.json();
+      const token = data?.data?.csrfToken || '';
+      if (token) {
+        csrfTokenRef.current = token;
+        setCsrfToken(token);
+      }
+      return token;
+    } catch {
+      return '';
+    }
+  };
+
   useEffect(() => {
-    fetch('/api/v1/auth/csrf?flow=signup')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data?.data?.csrfToken) {
-          setCsrfToken(data.data.csrfToken);
-        }
-      })
-      .catch(() => {});
+    // Canonical host enforcement: redirect 127.0.0.1 to localhost before form interaction
+    if (typeof window !== 'undefined' && window.location.hostname === '127.0.0.1') {
+      const canonicalUrl = window.location.href.replace('//127.0.0.1:', '//localhost:');
+      window.location.replace(canonicalUrl);
+      return;
+    }
+
+    fetchCsrfToken();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
     setError(null);
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      setError('Passwords do not match.');
       return;
     }
 
     setSubmitting(true);
 
     try {
-      let activeCsrfToken = csrfToken;
+      let activeCsrfToken = csrfTokenRef.current;
       if (!activeCsrfToken) {
-        try {
-          const csrfRes = await fetch('/api/v1/auth/csrf?flow=signup');
-          const csrfData = await csrfRes.json();
-          activeCsrfToken = csrfData?.data?.csrfToken || '';
-          if (activeCsrfToken) {
-            setCsrfToken(activeCsrfToken);
-          }
-        } catch {
-          // Fall through to request attempt
+        activeCsrfToken = await fetchCsrfToken();
+      }
+
+      const submitSignup = async (token: string) => {
+        return fetch('/api/v1/auth/signup', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-csrf-token': token,
+          },
+          body: JSON.stringify({
+            displayName: displayName.trim() || undefined,
+            email: email.trim(),
+            password,
+            confirmPassword,
+          }),
+        });
+      };
+
+      let res = await submitSignup(activeCsrfToken);
+      let data = await res.json().catch(() => null);
+
+      // Safe one-time automatic retry on recognized pre-auth CSRF failure
+      if (!res.ok && data?.error?.code === 'CSRF_ERROR') {
+        const freshToken = await fetchCsrfToken();
+        if (freshToken) {
+          res = await submitSignup(freshToken);
+          data = await res.json().catch(() => null);
         }
       }
 
-      const res = await fetch('/api/v1/auth/signup', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-csrf-token': activeCsrfToken,
-        },
-        body: JSON.stringify({
-          displayName: displayName.trim() || undefined,
-          email: email.trim(),
-          password,
-          confirmPassword,
-        }),
-      });
-
-      const data = await res.json();
       if (!res.ok) {
-        setError(data?.error?.message || 'Failed to create account');
+        if (data?.error?.code === 'CSRF_ERROR') {
+          setError('Your secure signup session expired. Please try again.');
+        } else {
+          setError(data?.error?.message || 'Failed to create account');
+        }
         return;
       }
 
-      window.location.href = '/dashboard';
+      window.location.href = '/auth/login?created=1';
     } catch {
       setError('An unexpected error occurred. Please try again.');
     } finally {
@@ -100,6 +129,7 @@ export default function SignupPage() {
         <form method="POST" onSubmit={handleSubmit} className={styles.authForm} noValidate>
           <Input
             id="signup-name"
+            name="displayName"
             type="text"
             label="Your Name (Optional)"
             description="Max 64 characters. Defaults to 'Learner'."
@@ -111,17 +141,19 @@ export default function SignupPage() {
 
           <Input
             id="signup-email"
+            name="email"
             type="email"
             label="Email address"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            autoComplete="email"
+            autoComplete="username"
             disabled={submitting}
           />
 
           <Input
             id="signup-password"
+            name="password"
             type="password"
             label="Password"
             description="Minimum 12 characters. Must not be common or compromised."
@@ -134,6 +166,7 @@ export default function SignupPage() {
 
           <Input
             id="signup-confirm-password"
+            name="confirmPassword"
             type="password"
             label="Confirm Password"
             value={confirmPassword}

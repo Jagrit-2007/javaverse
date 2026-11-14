@@ -23,7 +23,7 @@ export function getEmailTransporter(): MailTransporter {
   return transporter;
 }
 
-export async function sendOwnerVerificationEmail(params: {
+export async function sendVerificationEmail(params: {
   email: string;
   token: string;
 }): Promise<void> {
@@ -33,7 +33,7 @@ export async function sendOwnerVerificationEmail(params: {
   await transport.sendMail({
     from: env.SMTP_FROM,
     to: params.email,
-    subject: 'Verify your JavaVerse Owner email',
+    subject: 'Verify your JavaVerse email',
     text: `Welcome to JavaVerse!
 
 Please verify your email address to complete your account setup:
@@ -47,7 +47,7 @@ If you did not request this, you can safely ignore this email.`,
 <head><meta charset="utf-8"><title>Verify Email</title></head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.5; color: #111;">
   <div style="max-width: 560px; margin: 0 auto; padding: 24px;">
-    <h2>Verify your JavaVerse Owner email</h2>
+    <h2>Verify your JavaVerse email</h2>
     <p>Welcome to JavaVerse! Please verify your email address to complete your account setup.</p>
     <p style="margin: 24px 0;">
       <a href="${verifyUrl}" style="display: inline-block; background-color: #0d6efd; color: #ffffff; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: 500;">
@@ -56,47 +56,6 @@ If you did not request this, you can safely ignore this email.`,
     </p>
     <p style="font-size: 14px; color: #666;">This link is valid for 24 hours.</p>
     <p style="font-size: 13px; color: #888; margin-top: 32px;">If you did not request this, you can safely ignore this email.</p>
-  </div>
-</body>
-</html>`,
-  });
-}
-
-export async function sendMemberInvitationEmail(params: {
-  email: string;
-  token: string;
-  invitedByName?: string;
-}): Promise<void> {
-  const inviteUrl = `${env.APP_URL}/auth/invite#token=${encodeURIComponent(params.token)}`;
-  const transport = getEmailTransporter();
-  const inviter = params.invitedByName || 'The workspace administrator';
-
-  await transport.sendMail({
-    from: env.SMTP_FROM,
-    to: params.email,
-    subject: "You've been invited to join JavaVerse",
-    text: `${inviter} has invited you to join JavaVerse.
-
-Accept your invitation and create your account:
-${inviteUrl}
-
-This invitation is valid for 48 hours.
-
-If you were not expecting this invitation, you can ignore this email.`,
-    html: `<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="utf-8"><title>Workspace Invitation</title></head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.5; color: #111;">
-  <div style="max-width: 560px; margin: 0 auto; padding: 24px;">
-    <h2>You've been invited to JavaVerse</h2>
-    <p><strong>${inviter}</strong> has invited you to join their JavaVerse workspace as a learner.</p>
-    <p style="margin: 24px 0;">
-      <a href="${inviteUrl}" style="display: inline-block; background-color: #0d6efd; color: #ffffff; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: 500;">
-        Accept Invitation
-      </a>
-    </p>
-    <p style="font-size: 14px; color: #666;">This invitation is valid for 48 hours.</p>
-    <p style="font-size: 13px; color: #888; margin-top: 32px;">If you were not expecting this invitation, you can safely ignore this email.</p>
   </div>
 </body>
 </html>`,

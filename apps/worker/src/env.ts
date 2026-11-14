@@ -4,6 +4,7 @@ import { dirname, resolve, join } from 'node:path';
 import fs from 'node:fs';
 import { validateEnv, ConfigValidationError, type Env } from '@javaverse/schemas';
 import { createLogger } from '@javaverse/observability';
+import { verifyDatabaseStartupGuard } from '@javaverse/db';
 
 /**
  * Deterministically locates repository root by walking up until pnpm-workspace.yaml is found.
@@ -44,6 +45,10 @@ let env: Env;
 
 try {
   env = validateEnv(process.env);
+  verifyDatabaseStartupGuard('worker', env.DATABASE_URL, {
+    nodeEnv: env.NODE_ENV,
+    logger,
+  });
 } catch (error) {
   if (error instanceof ConfigValidationError) {
     logger.fatal(

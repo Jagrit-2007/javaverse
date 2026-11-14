@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
     await prisma.emailToken.updateMany({
       where: {
         subjectUserId: user.id,
-        purpose: 'PASSWORD_RESET',
+        purpose: 'RESET_PASSWORD',
         usedAt: null,
       },
       data: { usedAt: new Date() },
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
       data: {
         tokenHash,
         deliveryChannel: 'EMAIL',
-        purpose: 'PASSWORD_RESET',
+        purpose: 'RESET_PASSWORD',
         subjectUserId: user.id,
         subjectEmail: user.email,
         expiresAt,

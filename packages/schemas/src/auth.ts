@@ -13,8 +13,8 @@ export const passwordWhitespaceRegex = /^\s|\s$/;
 
 export const passwordSchema = z
   .string()
-  .min(12, 'Password must be at least 12 characters')
-  .max(128, 'Password must not exceed 128 characters')
+  .min(12, 'Use at least 12 characters.')
+  .max(128, 'Password cannot exceed 128 characters.')
   .refine(
     (val) => !passwordWhitespaceRegex.test(val),
     'Password cannot begin or end with whitespace.',
@@ -33,7 +33,7 @@ export const signupSchema = z
     confirmPassword: z.string().min(1, 'Password confirmation is required'),
   })
   .refine((data) => data.password === data.confirmPassword, {
-    message: 'Passwords do not match',
+    message: 'Passwords do not match.',
     path: ['confirmPassword'],
   });
 
@@ -62,17 +62,6 @@ export const resetPasswordSchema = z.object({
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, 'Current password is required'),
   newPassword: passwordSchema,
-});
-
-export const createInvitationSchema = z.object({
-  email: z.string().trim().email('Invalid email address').max(254),
-  role: z.enum(['MEMBER']).default('MEMBER'),
-});
-
-export const acceptInvitationSchema = z.object({
-  token: z.string().min(1, 'Invitation token is required'),
-  displayName: displayNameSchema.optional(),
-  password: passwordSchema,
 });
 
 export const verifyEmailSchema = z.object({

@@ -96,7 +96,6 @@ export async function proposeKbCandidate(analysisId: string, userId: string) {
 
 /**
  * Review a KB candidate (Approve, Reject, Demote, Edit).
- * Only accessible by OWNER.
  */
 export async function reviewKbCandidate(params: {
   candidateId: string;

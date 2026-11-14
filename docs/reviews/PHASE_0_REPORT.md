@@ -2,6 +2,9 @@
 **Specification Understanding & Implementation Risk Review**
 Date: 2026-10-26 | Spec authority: Part B + Parts G, I–S (Part H retired)
 
+> [!IMPORTANT]
+> **Historical record.** This document describes an earlier repository state and is not the current product specification.
+
 ---
 
 ## Deliverable 1 — 15-Line Architecture Summary

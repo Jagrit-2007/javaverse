@@ -54,12 +54,29 @@ export async function POST(request: NextRequest) {
 
   // Breach check on new password
   const breach = await checkPasswordBreach(newPassword, env.HIBP_ENFORCEMENT_MODE);
+  if (breach.common) {
+    return jsonError(
+      'PASSWORD_COMMON',
+      breach.message || 'This password is too common. Choose a longer, less predictable password.',
+      400,
+    );
+  }
   if (breach.breached) {
     return jsonError(
       'PASSWORD_BREACHED',
-      'This password appears in known security breaches. Please choose a different password.',
+      breach.message ||
+        'This password appears in a known breach list. Choose a different password or use a password manager to generate one.',
       400,
     );
+  }
+  if (breach.degraded) {
+    await recordAuditEvent({
+      action: 'auth.breach_check_degraded',
+      actorType: 'USER',
+      actorUserId: sessionCtx.user.id,
+      targetUserId: sessionCtx.user.id,
+      metadata: { provider: 'hibp', reason: 'unavailable', degraded: true },
+    });
   }
 
   const newHash = await hashPassword(newPassword);

@@ -16,7 +16,7 @@ export function generateTotpUri(
   let issuerStr: string;
 
   if (typeof accountNameOrOptions === 'object') {
-    account = accountNameOrOptions.account || 'owner@javaverse.local';
+    account = accountNameOrOptions.account || 'learner@javaverse.local';
     secretStr = accountNameOrOptions.secret;
     issuerStr = accountNameOrOptions.issuer || 'JavaVerse';
   } else {

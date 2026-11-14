@@ -138,6 +138,11 @@ export function getDashboardFixtureState(searchParams?: {
   [key: string]: string | string[] | undefined;
 }): DashboardFixtureState {
   if (process.env.E2E_FIXTURES_ENABLED === 'true' && searchParams) {
+    // Fail closed if database is the production or development database (never allow fixture backdoor on live data)
+    const dbUrl = process.env.DATABASE_URL || '';
+    if (dbUrl.includes('/javaverse?') || dbUrl.endsWith('/javaverse')) {
+      return null;
+    }
     const fixture = searchParams['_fixture'];
     if (
       fixture === 'loading' ||

@@ -43,5 +43,3 @@ export async function authenticateAsLearner(context: BrowserContext) {
 
   return { user, rawToken, publicId, sessionCookie: `javaverse_session=${rawToken}` };
 }
-
-export const authenticateAsOwner = authenticateAsLearner;

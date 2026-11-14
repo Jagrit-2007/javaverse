@@ -1,0 +1,4 @@
+# Gitleaks ignore list for verified synthetic historical test fixtures
+# Format: <commit>:<file>:<rule>:<line>
+52072576df998725565e90af17a063e9ae6f83ff:packages/ai/test/providers-compliance.test.ts:generic-api-key:203
+

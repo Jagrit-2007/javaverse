@@ -44,8 +44,7 @@
   color: var(--text-muted);
 }
 
-.sessionList,
-.invitationList {
+.sessionList {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);

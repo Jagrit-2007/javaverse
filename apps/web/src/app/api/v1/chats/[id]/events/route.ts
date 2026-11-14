@@ -21,7 +21,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     return jsonError('UNAUTHORIZED', 'Authentication required', 401);
   }
 
-  // Verify ownership
+  // User-scoped resource access validation
   const chat = await prisma.chat.findFirst({
     where: { id, userId: auth.user.id },
   });

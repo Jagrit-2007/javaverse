@@ -1,5 +1,8 @@
 # JavaVerse Phases 4–11 Durable Checkpoint Ledger
 
+> [!IMPORTANT]
+> **Historical record.** This document describes an earlier repository state and is not the current product specification.
+
 **Operating Branch:** `phase/04-chat-jobs-sse`  
 **Baseline Git Commit:** `5a53fe3` (`Merge branch 'fix/phase-3-ci-lighthouse-home'`, Tag: `phase-3-approved-r1`)  
 **Authorization:** Continuous implementation cycle covering Phases 4 through 11 authorized by repository owner.  

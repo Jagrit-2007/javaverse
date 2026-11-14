@@ -854,3 +854,140 @@ Credentials freedom, password policy, installation ownership, test database isol
 ## Blockers
 
 None. All criteria passing. All changes left uncommitted for owner review.
+
+## Repository-Alignment Remediation Progress
+
+1. **Dead Package Script Cleaned**: Removed `"bootstrap:owner"` from `package.json`. No active scripts reference missing executables.
+2. **Verification Email Refactored**: `sendVerificationEmail` implemented with neutral subject `"Verify your JavaVerse email"` and body copy. Dead invitation email helper deleted. Mailpit integration tests updated and passing.
+3. **REGISTRATION_MODE Purged**: Removed `REGISTRATION_MODE` from `.env.example`, `scripts/generate-env-local.mjs`, `packages/schemas/src/env.ts`, and `turbo.json`.
+4. **Suspended Account User Experience Hardened**: Updated `apps/web/src/app/(public)/auth/suspended/page.tsx` with neutral wording and `"Return to Sign in"` action.
+5. **Notes Page Status Ratified (Outcome B)**: Retained `/dashboard/notes` as an intentional future-feature placeholder shell with neutral wording (`Feature Preview · Scheduled for future release`).
+6. **Sandbox Policy Enforced**: Verified `SANDBOX_PROVIDER=mock` as the sole approved execution provider. Pinned `container_runner` as REJECTED in documentation and ensured factory fails closed on invalid provider requests.
+7. **Deterministic Static Hashes & Verification**: Added `pnpm verify:static-hashes` command, deleted redundant `packages/security/src/static-hashes.json`, and verified deterministic hash extraction.
+8. **Operations Guide Updated**: Retitled `docs/runbooks/OPERATIONS.md` to _"JavaVerse Self-Hosting & Local Operations Guide"_ with clear non-production disclaimers and single-installation instructions.
+9. **PROJECT_SPEC.md Historical Index**: Relabeled `PROJECT_SPEC.md` as historical index pointing to authoritative `docs/reviews/project-dossier/JAVAVERSE_PROJECT_DOSSIER.md`.
+10. **Terminology Standardized**: Cleaned legacy privileged-role language in active maintenance documentation; standardized on "project maintainer", "maintainer review", "manual smoke test", and "learner account".
+
+## Pre-Authentication CSRF & Multi-Flow Governance Remediation Status
+
+PASS — all criteria verified and passing across all canonical and browser test suites.
+
+### Pre-Authentication CSRF Verification Summary
+
+1. **Failure Root Cause Analysis**:
+   - **Primary Bug (Session Token Precedence)**: In `GET /api/v1/auth/csrf/route.ts`, `if (sessionCtx?.session)` unconditionally took precedence over explicit pre-auth flow queries (`?flow=signup`, `?flow=login`), generating a 2-part session token (`${signature}.${issuedAt}`) whenever ambient session cookies existed (e.g. following previous sign-in or navigating from an authenticated page). When submitted to `/api/v1/auth/signup` or `/api/v1/auth/login`, `validateCsrf` called `verifyFlowCsrfToken`, which failed validation (`parts.length !== 4`) and returned HTTP 403 `CSRF_ERROR` (`Invalid pre-auth CSRF token`).
+   - **Secondary Bug (Postgres Check Constraint)**: In `apps/web/src/app/api/v1/auth/password/forgot/route.ts` and `reset/route.ts`, token creation inserted `purpose: 'PASSWORD_RESET'`, violating Postgres check constraint `chk_email_tokens_purpose` which requires `purpose: 'RESET_PASSWORD'`.
+   - **Token Lifecycle & Replay Protection**: CSRF tokens must only be consumed upon successful state modification (account creation, session issuance, password reset). Token consumption on initial 401 invalid password broke subsequent login attempts without manual page refresh.
+
+2. **Remediation & Hardening**:
+   - **Explicit Flow Priority**: In `GET /api/v1/auth/csrf/route.ts`, query parameter `?flow=<flow>` strictly overrides ambient session state, generating 4-part flow-bound tokens (`${nonce}.${flow}.${expiresAt}.${signature}`).
+   - **Multi-Flow Isolation & Dedicated Cookies**: Distinct flows (`signup`, `login`, `forgot_password`, `reset_password`, `mfa`) issue dedicated cookies (`javaverse_csrf_<flow>` / `__Host-javaverse_csrf_<flow>`), guaranteeing cross-tab isolation and eliminating token overwrites.
+   - **Safe Automatic Retry & Friendly Messaging**: Sign-up and sign-in pages use React `useRef` to eliminate React state submission races and automatically retry once on recognized `CSRF_ERROR` (HTTP 403) before showing friendly copy: `"Your secure signup session expired. Please try again."` or `"Your secure sign-in session expired. Please try again."`.
+   - **Single-Use Replay Protection**: Tokens are marked consumed in memory/Redis upon successful account creation or session issuance; replayed tokens fail validation with HTTP 403.
+   - **Cache & Origin Controls**: Enforced `Cache-Control: no-store, no-cache, must-revalidate, max-age=0` and `Pragma: no-cache` on all CSRF token responses, rejected `Sec-Fetch-Site: cross-site`, and redirected `127.0.0.1` to canonical `http://localhost:3000`.
+
+3. **Complete Monorepo Test & Verification Pass**:
+   - `apps/web/test/integration/csrf-ratelimit.test.ts`: 46/46 tests passed covering all flow binding, replay protection, and rate-limiting scenarios.
+   - `apps/web/test/e2e/auth.spec.ts`: 26/26 tests passed across Chromium and Firefox, including full multi-flow lifecycle test 13.
+   - `pnpm test`: All packages passing (230 web tests passing).
+   - `pnpm test:clean-db`: Passed on isolated clean database.
+   - `pnpm test:backup-restore`: Passed with 100% data consistency.
+   - `pnpm build`: Succeeded in Turbopack with deterministic static script hashes.
+   - `pnpm verify:static-hashes`: 19 hashes verified with zero drift.
+
+## Password Creation, Manager Integration & Breach Screening Remediation Status
+
+PASS — all criteria verified and passing across all canonical and browser test suites.
+
+### Password Creation & Credential Reliability Summary
+
+1. **Failure Analysis & Root Cause Classification**:
+   - **Confirmed Facts:**
+     - A Firefox password manager saved credential on `localhost:3000` stored `./start-dev.sh` as the password for `learner1@gmail.com`.
+     - Prior authentication forms in `apps/web` lacked semantic HTML `<form>` wrappers and explicit input `name` attributes (`name="displayName"`, `name="email"`, `name="password"`, `name="confirmPassword"`). Additionally, email fields previously used `autoComplete="email"` instead of standard `autoComplete="username"`.
+     - The account `learner1@gmail.com` does not exist in the active development database `javaverse` (0 rows; separate account `hello1@gmail.com` was created during manual testing and remains intact).
+     - Plaintext passwords are never stored. JavaVerse stores the one-way Argon2id password hash and verifies the exact submitted password against that hash during sign-in. If a browser password manager autofills an incorrect saved value (such as `./start-dev.sh`), Argon2id verification correctly rejects the submission with HTTP 401 `INVALID_CREDENTIALS` (`Invalid email or password`).
+   - **Plausible Contributing Factors:**
+     - The browser password manager contains an incorrect saved password. Earlier missing form names and autocomplete metadata may have contributed to incorrect credential classification, but the exact mechanism that stored the terminal command cannot be proven from available evidence.
+   - **Unproven Hypotheses:**
+     - The hypothesis that JavaVerse or Firefox automatically captured clipboard text or terminal snippets without user interaction is unproven and has not been reproduced.
+   - **Breached-Password Screening Disaggregation:** Common dictionary passwords and known HIBP breach list entries previously returned the identical error code `PASSWORD_BREACHED` and identical message (`This password appears in known security breaches...`), conflating predictable passwords with compromised accounts. Furthermore, HIBP range API line splitting did not tolerate CRLF/LF variations, and network failures or timeouts during breach checks caused signup failures rather than gracefully degrading.
+
+2. **Remediation & Hardening**:
+   - **Form Semantics & Manager Attributes:** Added proper HTML `<form>` wrappers and explicit input attributes across all authentication pages:
+     - `name="displayName"`, `autoComplete="name"`
+     - `name="email"`, `autoComplete="username"`
+     - `name="password"`, `autoComplete="new-password"` (signup, reset, security) / `autoComplete="current-password"` (login, reauth)
+     - `name="confirmPassword"`, `autoComplete="new-password"`
+   - **Password Policy:** Enforced min 12, max 128 chars. Internal spaces are permitted for multi-word passphrases; leading/trailing whitespace is rejected with `"Password cannot begin or end with whitespace."`. No mandatory composition rules (NIST SP 800-63B compliant). Length < 12 returns `"Use at least 12 characters."`. Confirmation mismatch returns `"Passwords do not match."`.
+   - **Distinct Common vs Breached Errors:**
+     - Local blocklist match returns HTTP 400 `PASSWORD_COMMON` with `"This password is too common. Choose a longer, less predictable password."`.
+     - HIBP breach match returns HTTP 400 `PASSWORD_BREACHED` with `"This password appears in a known breach list. Choose a different password or use a password manager to generate one."`.
+   - **Degraded-Mode Non-Blocking Fallback:** When HIBP times out, returns HTTP 500, or experiences network failure, JavaVerse logs a non-blocking audit event (`auth.breach_check_degraded`) with sanitized metadata (`{ provider: 'hibp', reason: 'unavailable', degraded: true }`) without logging learner emails or passwords, and allows registration, password change, and password reset to proceed using local policy checks. Login never contacts external breach services.
+   - **Actual Account Recovery Verification:** Audited development accounts in `javaverse` DB. The account `learner1@gmail.com` was verified as non-existent (0 rows), confirming the screenshot reflected an uncompleted or test attempt, while existing account `hello1@gmail.com` remains active with its valid Argon2id hash. Tested and verified full visible browser password recovery via Mailpit fragment link (`#token=`) and new learner password creation.
+
+3. **Complete Monorepo Test & Verification Pass**:
+   - `packages/security/test/password.test.ts`: 56/56 tests passed covering Argon2id, whitespace policy, passphrases, common detection, and HIBP mocking/degraded mode.
+   - `packages/schemas/test/auth.test.ts`: 44/44 tests passed covering password length constraints and confirmation mismatch.
+   - `apps/web/test/integration/credentials-reliability.test.ts`: 26/26 tests passed covering full signup, login, password change, and password reset flows.
+   - `apps/web/test/e2e/auth.spec.ts`: 32/32 tests passed across Chromium and Firefox, including full password manager form semantics, autofill simulation, passphrase support, breach screening, exact password representation across 4 password varieties, and full browser account recovery.
+
+---
+
+## Phase S Checkpoint: Evidence-Driven Signup Persistence & Sign-In Reliability Remediation
+
+1. **Root Cause Analysis & Account Audit**:
+   - **Database Targeting Collision:** Playwright's `webServer` launches Next.js on port 3000 targeting `javaverse_test`. Manual browser operations on port 3000 while this server ran wrote accounts to `javaverse_test`, which were subsequently wiped by automated test cleanup (`test.beforeEach` running `prisma.user.deleteMany()`). Starting `./start-dev.sh` subsequently connected to `javaverse`, where the row had never been written, resulting in HTTP 401 `Invalid email or password`.
+   - **Dashboard Fixture Backdoors:** `DashboardLayout`, `middleware.ts`, `library`, `progress`, and `settings` previously permitted unauthenticated rendering of mock `Demo User` data when `E2E_FIXTURES_ENABLED=true`, masking whether a database session was committed.
+   - **Browser Password Manager Disproven as Root Cause:** Investigated browser credential storage as a secondary factor; confirmed password manager entries cannot cause database rows to disappear or fail to persist. PostgreSQL is the sole system of record for account existence.
+   - **Forensic Account Audit:**
+     - `learner@gmail.com`: Active in `javaverse` (ID `69a60d83-...`), verified, Argon2id hash intact, 1 active session.
+     - `persistence.learner@gmail.com`: Active in `javaverse` (ID `80436add-...`), verified, Argon2id hash intact, 4 active sessions.
+     - `hello1@gmail.com`: Active in `javaverse` (ID `f664d9db-...`), verified, Argon2id hash intact.
+     - `learner1@gmail.com`: 0 rows in `javaverse` and 0 rows in `javaverse_test`. Classified as never persisted to `javaverse` (created against temporary test server and wiped by tests).
+
+2. **Code & Architecture Remediations**:
+   - **Dashboard Backdoors Removed:** Removed all `E2E_FIXTURES_ENABLED` fallbacks from `DashboardLayout`, `middleware.ts`, `library/page.tsx`, `progress/page.tsx`, and `settings/page.tsx`. Unauthenticated access strictly redirects to `/auth/login`.
+   - **Safe Database Startup Guards:** Implemented `verifyDatabaseStartupGuard` and `getSafeDatabaseDiagnostics` in `@javaverse/db`. Logs `{ component, dbHost, dbPort, dbName, mode }` once at startup without credentials. Rejects non-allowlisted test databases in test mode and warns on test databases in development mode.
+   - **Playwright Test Isolation Enforced:** Added pre-flight safety assertion forbidding Playwright from targeting `javaverse` both in config evaluation and the spawned `webServer` subshell.
+   - **Safe Test Diagnostics in Login:** Added non-sensitive diagnostic logging in `apps/web/src/app/api/v1/auth/login/route.ts` reporting account lookup, status, password verification success, dbName, userId, and session creation without passwords or hashes.
+   - **Documentation Corrections:** Updated `README.md`, `docs/runbooks/OPERATIONS.md`, `docs/DECISIONS.md`, and `docs/RISK_REGISTER.md` confirming PostgreSQL is the sole source of truth for accounts, Argon2id hashes are one-way, and password reset via Mailpit is the supported recovery path.
+
+3. **Automated Verification**:
+   - `apps/web/test/integration/credentials-reliability.test.ts`: 33/33 tests passed, including transaction atomicity rollback, startup guards, and database-backed acceptance journey.
+
+---
+
+## Phase S Checkpoint: Decoupled Account-Creation and Sign-In Lifecycle Remediation
+
+PASS — all criteria verified and passing across all canonical unit, integration, and Playwright browser suites.
+
+1. **Problem Statement & Lifecycle Requirements**:
+   - Previously, JavaVerse automatically authenticated learners upon account creation and redirected directly to `/dashboard`.
+   - This flow masked sign-in defects, allowed successful registration to be conflated with proof that password verification worked, and confused credential troubleshooting.
+   - Authoritative lifecycle enforced:
+     `Create account` → commit learner account and Argon2id hash → do NOT create an authenticated session → redirect to `/auth/login?created=1` → display accessible confirmation notice → learner manually enters same credentials → successful sign-in creates authenticated session → redirect to `/dashboard`.
+
+2. **Code & Architecture Remediations**:
+   - **Signup Route Session Decoupling (`/api/v1/auth/signup`)**:
+     - Added already-authenticated guard using `getSessionFromRequest`: returns HTTP 400 `ALREADY_AUTHENTICATED` (`"An account is already signed in. Sign out before creating another account."`) if an active session exists.
+     - Removed `generateSessionTokens` and `createSessionRow` from the signup transaction.
+     - Removed `Set-Cookie` header (`buildCookieHeader`) from signup response.
+     - Returns HTTP 201 with `{ success: true, message: "Account created successfully. Sign in to continue.", user: { id, email, displayName, role }, requiresSignIn: true }`.
+   - **Signup Page Redirect (`/auth/signup`)**:
+     - On HTTP 201 success, redirects via `window.location.href = '/auth/login?created=1'`.
+   - **Login Page Confirmation Notice (`/auth/login`)**:
+     - Detects `created=1` query parameter on mount and displays an accessible status alert (`role="status"`): `"Account created successfully. Sign in with your email and password."`.
+     - Automatically clears confirmation notice upon form submission.
+   - **Dashboard Fixtures Fail-Closed Safety**:
+     - Updated `getDashboardFixtureState` in `apps/web/src/components/fixtures/dashboardData.ts` to fail closed if `process.env.DATABASE_URL` targets `javaverse`.
+   - **Documentation & Invariants**:
+     - Updated `README.md`, `docs/runbooks/OPERATIONS.md`, and `docs/DECISIONS.md` (Decision 36).
+
+3. **Automated Verification**:
+   - `apps/web/test/integration/signup.test.ts`: 8/8 tests passed (asserting HTTP 201 returns `requiresSignIn: true`, 0 sessions in DB, no cookie; subsequent login returns HTTP 200, 1 session in DB, session cookie set; already-authenticated rejection returns HTTP 400).
+   - `apps/web/test/integration/csrf-ratelimit.test.ts`: 49/49 tests passed.
+   - `apps/web/test/integration/credentials-reliability.test.ts`: 34/34 tests passed.
+   - `apps/web/test/e2e/auth.spec.ts`: 32/32 tests passed across Chromium and Firefox.
+   - Complete Playwright Browser Suite: 188/188 tests passed (`pnpm --filter @javaverse/web test:e2e`).
+   - Monorepo Unit & Integration Suite: 249/249 tests passed in `@javaverse/web`, 100% across all packages.

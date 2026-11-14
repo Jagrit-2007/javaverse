@@ -37,7 +37,7 @@ export interface SessionContext {
  * - If user has displayName: return it.
  * - Otherwise: generic fallback "Learner".
  * - Never derives display name from email local part.
- * - Never returns privileged role names like "Owner".
+ * - Returns only learner-safe account fields and does not expose obsolete authorization metadata.
  */
 export function getSafeDisplayName(user: { displayName?: string | null }): string {
   if (user.displayName && user.displayName.trim().length > 0) {

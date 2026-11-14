@@ -3,7 +3,7 @@ JavaVerse Agent Rules :
 Read PROJECT_SPEC.md completely before working.
 The latest normative section overrides earlier conflicting wording.
 Part S is the final authoritative override.
-Execute only the phase explicitly requested by the owner.
+Execute only the phase explicitly requested by the project maintainer.
 Never begin the next phase automatically.
 Use one active implementation agent at a time.
 Use pnpm only. Do not introduce npm or Yarn workflows.

@@ -14,7 +14,7 @@ import { MockSandboxClient } from '@javaverse/sandbox';
 describe('Phase 10: KB, Feedback, and Evals Integration', () => {
   let consentedUser: any;
   let nonConsentedUser: any;
-  let ownerUser: any;
+  let reviewerUser: any;
   let verifiedAnalysis: any;
   let unverifiedAnalysis: any;
 
@@ -36,7 +36,7 @@ describe('Phase 10: KB, Feedback, and Evals Integration', () => {
       },
     });
 
-    ownerUser = await prisma.user.create({
+    reviewerUser = await prisma.user.create({
       data: {
         email: `reviewer-${Date.now()}@test.local`,
         displayName: 'Reviewer User',
@@ -142,7 +142,7 @@ describe('Phase 10: KB, Feedback, and Evals Integration', () => {
     // 1. Approve candidate
     const approved = await reviewKbCandidate({
       candidateId: candidate.id,
-      reviewerUserId: ownerUser.id,
+      reviewerUserId: reviewerUser.id,
       action: 'APPROVE',
     });
     expect(approved.status).toBe('APPROVED');
@@ -164,7 +164,7 @@ describe('Phase 10: KB, Feedback, and Evals Integration', () => {
     // 3. Demote candidate
     const demoted = await reviewKbCandidate({
       candidateId: candidate.id,
-      reviewerUserId: ownerUser.id,
+      reviewerUserId: reviewerUser.id,
       action: 'DEMOTE',
     });
     expect(demoted.status).toBe('DEMOTED');
@@ -184,7 +184,7 @@ describe('Phase 10: KB, Feedback, and Evals Integration', () => {
     const candidate = await proposeKbCandidate(verifiedAnalysis.id, consentedUser.id);
     await reviewKbCandidate({
       candidateId: candidate.id,
-      reviewerUserId: ownerUser.id,
+      reviewerUserId: reviewerUser.id,
       action: 'APPROVE',
     });
 
@@ -214,12 +214,12 @@ describe('Phase 10: KB, Feedback, and Evals Integration', () => {
 
     const resolved = await resolveFeedbackReport({
       reportId: report.id,
-      reviewerUserId: ownerUser.id,
+      reviewerUserId: reviewerUser.id,
       resolution: 'RESOLVED',
     });
 
     expect(resolved.status).toBe('RESOLVED');
-    expect(resolved.resolvedBy).toBe(ownerUser.id);
+    expect(resolved.resolvedBy).toBe(reviewerUser.id);
   });
 
   it('enforces golden evaluation regression gate: flags regression when score drops below threshold', async () => {

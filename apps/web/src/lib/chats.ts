@@ -153,7 +153,7 @@ export async function createChatInFirstFreeSlot(
 }
 
 /**
- * Retrieves chat details and messages, ensuring ownership.
+ * Retrieves chat details and messages with user-scoped access validation.
  */
 export async function getChatById(
   chatId: string,
@@ -294,7 +294,7 @@ export async function postUserMessage(params: {
     throw new Error('Message exceeds 10,000 character maximum limit.');
   }
 
-  // 1. Verify chat ownership
+  // 1. User-scoped resource access validation
   const chat = await prisma.chat.findFirst({
     where: { id: chatId, userId },
   });

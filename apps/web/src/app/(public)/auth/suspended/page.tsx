@@ -33,18 +33,19 @@ export default function SuspendedAccountPage() {
         <div className={styles.authHeader}>
           <h1 className={styles.authTitle}>Account Suspended</h1>
           <p className={styles.authSubtitle}>
-            Your JavaVerse account has been temporarily suspended by the administrator.
+            This account is currently unavailable. Account recovery is not yet supported in the
+            JavaVerse interface.
           </p>
         </div>
 
         <div role="alert" className={`${styles.alertBox} ${styles.alertError}`}>
-          Access to this workspace has been revoked. If you believe this is an error, please contact
-          your workspace administrator or support.
+          This account is currently unavailable. Account recovery is not yet supported in the
+          JavaVerse interface.
         </div>
 
         <div style={{ marginTop: 'var(--space-6)' }}>
           <Button type="button" variant="secondary" onClick={handleLogout} fullWidth>
-            Sign In with Another Account
+            Return to Sign in
           </Button>
         </div>
 

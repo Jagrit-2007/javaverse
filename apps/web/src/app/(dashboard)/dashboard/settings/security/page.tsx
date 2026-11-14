@@ -21,6 +21,7 @@ export default function SecuritySettingsPage() {
   // Password change state
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [passwordMsg, setPasswordMsg] = useState<{
     type: 'success' | 'error';
     text: string;
@@ -126,6 +127,12 @@ export default function SecuritySettingsPage() {
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordMsg(null);
+
+    if (newPassword !== confirmNewPassword) {
+      setPasswordMsg({ type: 'error', text: 'Passwords do not match.' });
+      return;
+    }
+
     setPasswordSubmitting(true);
 
     try {
@@ -198,11 +205,13 @@ export default function SecuritySettingsPage() {
             >
               <Input
                 id="reauth-pw"
+                name="password"
                 type="password"
                 label="Account Password"
                 value={reauthPassword}
                 onChange={(e) => setReauthPassword(e.target.value)}
                 required
+                autoComplete="current-password"
                 autoFocus
               />
               <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
@@ -304,21 +313,36 @@ export default function SecuritySettingsPage() {
         >
           <Input
             id="current-pw"
+            name="currentPassword"
             type="password"
             label="Current Password"
             value={currentPassword}
             onChange={(e) => setCurrentPassword(e.target.value)}
             required
+            autoComplete="current-password"
             disabled={passwordSubmitting}
           />
           <Input
             id="new-pw"
+            name="newPassword"
             type="password"
             label="New Password"
-            description="Minimum 12 characters"
+            description="Minimum 12 characters. Must not be common or compromised."
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             required
+            autoComplete="new-password"
+            disabled={passwordSubmitting}
+          />
+          <Input
+            id="confirm-new-pw"
+            name="confirmPassword"
+            type="password"
+            label="Confirm New Password"
+            value={confirmNewPassword}
+            onChange={(e) => setConfirmNewPassword(e.target.value)}
+            required
+            autoComplete="new-password"
             disabled={passwordSubmitting}
           />
           <Button type="submit" variant="primary" disabled={passwordSubmitting}>

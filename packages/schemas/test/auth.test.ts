@@ -89,4 +89,33 @@ describe('Auth Schemas & Password Whitespace Policy', () => {
       expect(parsed.data.password).toBe(rawPw);
     }
   });
+
+  it('rejects passwords shorter than 12 characters with exact required message', () => {
+    const result = passwordSchema.safeParse('short123!');
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toBe('Use at least 12 characters.');
+    }
+  });
+
+  it('rejects passwords longer than 128 characters with exact required message', () => {
+    const result = passwordSchema.safeParse('A'.repeat(129));
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toBe('Password cannot exceed 128 characters.');
+    }
+  });
+
+  it('rejects signup with mismatched passwords with exact required message', () => {
+    const result = signupSchema.safeParse({
+      displayName: 'Learner',
+      email: 'learner@example.com',
+      password: validPassword,
+      confirmPassword: 'DifferentPassword123!',
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toBe('Passwords do not match.');
+    }
+  });
 });

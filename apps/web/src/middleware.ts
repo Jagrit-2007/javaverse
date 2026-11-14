@@ -34,12 +34,10 @@ export function middleware(request: NextRequest) {
     request.cookies.has('__Host-javaverse_session') || request.cookies.has('javaverse_session');
 
   if (isDashboardRoute && !hasSessionCookie) {
-    if (process.env.E2E_FIXTURES_ENABLED !== 'true') {
-      const loginUrl = new URL('/auth/login', request.url);
-      // Safe relative return URL
-      loginUrl.searchParams.set('returnUrl', pathname);
-      return NextResponse.redirect(loginUrl);
-    }
+    const loginUrl = new URL('/auth/login', request.url);
+    // Safe relative return URL
+    loginUrl.searchParams.set('returnUrl', pathname);
+    return NextResponse.redirect(loginUrl);
   }
 
   let cspHeaderValue: string;

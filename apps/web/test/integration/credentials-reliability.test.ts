@@ -1,14 +1,24 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { createHash } from 'node:crypto';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
-import { prisma, PrismaClient, assertSafeTestDatabase } from '@javaverse/db';
+import {
+  prisma,
+  PrismaClient,
+  assertSafeTestDatabase,
+  getSafeDatabaseDiagnostics,
+  verifyDatabaseStartupGuard,
+} from '@javaverse/db';
 import { createCsrfToken } from '@/lib/csrf';
 import { resolveSession, SESSION_COOKIE_NAME } from '@/lib/auth';
-import { verifyPassword } from '@javaverse/security';
+import { verifyPassword, generateRandomToken, deriveTokenDigest } from '@javaverse/security';
 import { POST as handleSignup } from '@/app/api/v1/auth/signup/route';
 import { POST as handleLogin } from '@/app/api/v1/auth/login/route';
 import { POST as handleLogout } from '@/app/api/v1/auth/logout/route';
 import { GET as handleSession } from '@/app/api/v1/auth/session/route';
 import { GET as handleGetSessions } from '@/app/api/v1/auth/sessions/route';
+import { POST as handlePasswordChange } from '@/app/api/v1/auth/password/change/route';
+import { POST as handlePasswordReset } from '@/app/api/v1/auth/password/reset/route';
+import { getServerKeys } from '@/lib/keys';
 import { getRedisCacheClient } from '@/lib/redis';
 
 const BASE_TEST_PASSWORD = 'SecureLearnerPass!2026';
@@ -46,6 +56,40 @@ function extractRawSessionToken(response: Response): string | null {
   if (!setCookie) return null;
   const match = setCookie.match(new RegExp(`${SESSION_COOKIE_NAME}=([^;]+)`));
   return match ? match[1]! : null;
+}
+
+function createChangePasswordRequest(
+  body: Record<string, unknown>,
+  rawToken: string,
+  publicId: string,
+  ip = '127.0.0.1',
+) {
+  const csrfToken = createCsrfToken({ sessionId: publicId });
+  return new NextRequest('http://localhost:3000/api/v1/auth/password/change', {
+    method: 'POST',
+    headers: {
+      origin: 'http://localhost:3000',
+      'Content-Type': 'application/json',
+      'x-csrf-token': csrfToken,
+      'x-forwarded-for': ip,
+      cookie: `${SESSION_COOKIE_NAME}=${rawToken}`,
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+function createResetPasswordRequest(body: Record<string, unknown>, ip = '127.0.0.1') {
+  const csrfToken = createCsrfToken({ flow: 'reset_password' });
+  return new NextRequest('http://localhost:3000/api/v1/auth/password/reset', {
+    method: 'POST',
+    headers: {
+      origin: 'http://localhost:3000',
+      'Content-Type': 'application/json',
+      'x-csrf-token': csrfToken,
+      'x-forwarded-for': ip,
+    },
+    body: JSON.stringify(body),
+  });
 }
 
 describe('Credentials Freedom & Sign-in Reliability Integration Tests (Phase S)', () => {
@@ -122,7 +166,14 @@ describe('Credentials Freedom & Sign-in Reliability Integration Tests (Phase S)'
     const sRes = await handleSignup(sReq);
     expect(sRes.status).toBe(201);
 
-    const token = extractRawSessionToken(sRes);
+    const sToken = extractRawSessionToken(sRes);
+    expect(sToken).toBeNull();
+
+    const lReq = createLoginRequest({ email, password: BASE_TEST_PASSWORD });
+    const lRes = await handleLogin(lReq);
+    expect(lRes.status).toBe(200);
+
+    const token = extractRawSessionToken(lRes);
     expect(token).not.toBeNull();
 
     const sessionCtx = await resolveSession(token);
@@ -309,7 +360,7 @@ describe('Credentials Freedom & Sign-in Reliability Integration Tests (Phase S)'
     }
   });
 
-  it('15. verifies complete signup -> logout -> login sequence preserves exact user ID', async () => {
+  it('15. verifies complete signup -> sign in -> logout -> re-login sequence preserves exact user ID', async () => {
     const email = `lifecycle.learner.${Date.now()}@example.com`;
     const sRes = await handleSignup(
       createSignupRequest({
@@ -322,7 +373,22 @@ describe('Credentials Freedom & Sign-in Reliability Integration Tests (Phase S)'
     expect(sRes.status).toBe(201);
     const sData = await sRes.json();
     const signupUserId = sData.data.user.id;
-    const initialRawToken = extractRawSessionToken(sRes);
+    expect(sData.data.requiresSignIn).toBe(true);
+
+    // Assert NO session cookie is set during signup
+    const signupRawToken = extractRawSessionToken(sRes);
+    expect(signupRawToken).toBeNull();
+
+    // Assert 0 sessions in DB after signup
+    const sessionsAfterSignup = await prisma.session.count({ where: { userId: signupUserId } });
+    expect(sessionsAfterSignup).toBe(0);
+
+    // Initial sign-in with same credentials creates session
+    const firstLoginRes = await handleLogin(
+      createLoginRequest({ email, password: BASE_TEST_PASSWORD }),
+    );
+    expect(firstLoginRes.status).toBe(200);
+    const initialRawToken = extractRawSessionToken(firstLoginRes);
     expect(initialRawToken).not.toBeNull();
 
     // Verify session in DB
@@ -547,5 +613,494 @@ describe('Credentials Freedom & Sign-in Reliability Integration Tests (Phase S)'
     });
     const protectedRes = await handleGetSessions(protectedReq);
     expect(protectedRes.status).toBe(401);
+  });
+
+  it('22. rejects signup with common password and returns friendly common-password copy', async () => {
+    const email = `common.pw.${Date.now()}@example.com`;
+    const res = await handleSignup(
+      createSignupRequest({
+        email,
+        password: 'password12345',
+        confirmPassword: 'password12345',
+      }),
+    );
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error.code).toBe('PASSWORD_COMMON');
+    expect(data.error.message).toBe(
+      'This password is too common. Choose a longer, less predictable password.',
+    );
+  });
+
+  it('23. rejects signup with known breached password and returns friendly breach copy', async () => {
+    const originalFetch = globalThis.fetch;
+    const testPw = 'BreachedPassword123!';
+    try {
+      globalThis.fetch = async () => {
+        const sha1 = createHash('sha1').update(testPw).digest('hex').toUpperCase();
+        const suffix = sha1.slice(5);
+        return new Response(`${suffix}:42\r\n`, { status: 200 });
+      };
+
+      const email = `breached.pw.${Date.now()}@example.com`;
+      const res = await handleSignup(
+        createSignupRequest({
+          email,
+          password: testPw,
+          confirmPassword: testPw,
+        }),
+      );
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.error.code).toBe('PASSWORD_BREACHED');
+      expect(data.error.message).toBe(
+        'This password appears in a known breach list. Choose a different password or use a password manager to generate one.',
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('24. degraded breach check allows signup to succeed and records audit log', async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = async () => {
+        throw new Error('HIBP connection timeout');
+      };
+
+      const email = `degraded.learner.${Date.now()}@example.com`;
+      const res = await handleSignup(
+        createSignupRequest({
+          email,
+          password: 'MySafePassphrase2026!',
+          confirmPassword: 'MySafePassphrase2026!',
+        }),
+      );
+      expect(res.status).toBe(201);
+
+      const auditEvent = await prisma.auditLog.findFirst({
+        where: { action: 'auth.breach_check_degraded' },
+      });
+      expect(auditEvent).not.toBeNull();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('25. rejects signup with password < 12 characters with exact required message', async () => {
+    const email = `short.pw.${Date.now()}@example.com`;
+    const res = await handleSignup(
+      createSignupRequest({
+        email,
+        password: 'short',
+        confirmPassword: 'short',
+      }),
+    );
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error.message).toBe('Use at least 12 characters.');
+  });
+
+  it('26. rejects signup with mismatched confirmation with exact required message', async () => {
+    const email = `mismatch.pw.${Date.now()}@example.com`;
+    const res = await handleSignup(
+      createSignupRequest({
+        email,
+        password: BASE_TEST_PASSWORD,
+        confirmPassword: 'DifferentPassword123!',
+      }),
+    );
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error.message).toBe('Passwords do not match.');
+  });
+
+  it('27. password change flow requires correct current password and validates new password policy', async () => {
+    const email = `change.pw.${Date.now()}@example.com`;
+    const sRes = await handleSignup(
+      createSignupRequest({
+        email,
+        password: BASE_TEST_PASSWORD,
+        confirmPassword: BASE_TEST_PASSWORD,
+      }),
+    );
+    expect(sRes.status).toBe(201);
+
+    const lRes = await handleLogin(createLoginRequest({ email, password: BASE_TEST_PASSWORD }));
+    expect(lRes.status).toBe(200);
+    const rawToken = extractRawSessionToken(lRes)!;
+    const sessionCtx = await resolveSession(rawToken);
+    expect(sessionCtx).not.toBeNull();
+
+    // 1. Wrong current password -> 400
+    const badChangeRes = await handlePasswordChange(
+      createChangePasswordRequest(
+        {
+          currentPassword: 'WrongPassword999!',
+          newPassword: 'BrandNewSecurePass2026!',
+        },
+        rawToken,
+        sessionCtx!.session.publicId,
+      ),
+    );
+    expect(badChangeRes.status).toBe(400);
+    const badChangeData = await badChangeRes.json();
+    expect(badChangeData.error.message).toBe('Incorrect current password');
+
+    // 2. Common new password -> 400 PASSWORD_COMMON
+    const commonChangeRes = await handlePasswordChange(
+      createChangePasswordRequest(
+        {
+          currentPassword: BASE_TEST_PASSWORD,
+          newPassword: 'password12345',
+        },
+        rawToken,
+        sessionCtx!.session.publicId,
+      ),
+    );
+    expect(commonChangeRes.status).toBe(400);
+    const commonChangeData = await commonChangeRes.json();
+    expect(commonChangeData.error.code).toBe('PASSWORD_COMMON');
+
+    // 3. Valid new password -> 200
+    const newPassword = 'BrandNewSecurePass2026!';
+    const okChangeRes = await handlePasswordChange(
+      createChangePasswordRequest(
+        {
+          currentPassword: BASE_TEST_PASSWORD,
+          newPassword,
+        },
+        rawToken,
+        sessionCtx!.session.publicId,
+      ),
+    );
+    expect(okChangeRes.status).toBe(200);
+
+    // Old password no longer works
+    const oldLoginRes = await handleLogin(
+      createLoginRequest({ email, password: BASE_TEST_PASSWORD }),
+    );
+    expect(oldLoginRes.status).toBe(401);
+
+    // New password works
+    const newLoginRes = await handleLogin(createLoginRequest({ email, password: newPassword }));
+    expect(newLoginRes.status).toBe(200);
+  });
+
+  it('28. password reset flow validates token and validates new password policy', async () => {
+    const email = `reset.pw.${Date.now()}@example.com`;
+    const sRes = await handleSignup(
+      createSignupRequest({
+        email,
+        password: BASE_TEST_PASSWORD,
+        confirmPassword: BASE_TEST_PASSWORD,
+      }),
+    );
+    expect(sRes.status).toBe(201);
+    const dbUser = await prisma.user.findUnique({ where: { email } });
+    expect(dbUser).not.toBeNull();
+
+    // 1. Invalid reset token -> 400
+    const badTokenRes = await handlePasswordReset(
+      createResetPasswordRequest({
+        token: 'invalid-nonexistent-token',
+        password: 'BrandNewResetPass2026!',
+      }),
+    );
+    expect(badTokenRes.status).toBe(400);
+    const badTokenData = await badTokenRes.json();
+    expect(badTokenData.error.message).toBe('The password reset link is invalid or has expired');
+
+    // 2. Generate valid emailToken in DB
+    const keys = getServerKeys();
+    const rawResetToken = generateRandomToken(32);
+    const tokenHash = deriveTokenDigest(rawResetToken, 'password_reset', keys.authTokenHmacKey);
+    await prisma.emailToken.create({
+      data: {
+        tokenHash,
+        deliveryChannel: 'EMAIL',
+        purpose: 'RESET_PASSWORD',
+        subjectUserId: dbUser!.id,
+        subjectEmail: dbUser!.email,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      },
+    });
+
+    // 3. Reset with common password -> 400 PASSWORD_COMMON
+    const commonResetRes = await handlePasswordReset(
+      createResetPasswordRequest({
+        token: rawResetToken,
+        password: 'password12345',
+      }),
+    );
+    expect(commonResetRes.status).toBe(400);
+    const commonResetData = await commonResetRes.json();
+    expect(commonResetData.error.code).toBe('PASSWORD_COMMON');
+
+    // 4. Reset with valid password -> 200
+    const newPassword = 'ResetSecurePass2026!';
+    const okResetRes = await handlePasswordReset(
+      createResetPasswordRequest({
+        token: rawResetToken,
+        password: newPassword,
+      }),
+    );
+    expect(okResetRes.status).toBe(200);
+
+    // Login with reset password succeeds
+    const lRes = await handleLogin(createLoginRequest({ email, password: newPassword }));
+    expect(lRes.status).toBe(200);
+  });
+
+  it('29. signup transaction atomicity: rolls back completely on user creation failure', async () => {
+    const email = `fail.user.${Date.now()}@example.com`;
+    const orig$transaction = prisma.$transaction.bind(prisma);
+    vi.spyOn(prisma, '$transaction').mockImplementationOnce(async (fn: any, ...args: any[]) => {
+      return orig$transaction(
+        async (tx: any) => {
+          tx.user.create = vi.fn().mockRejectedValue(new Error('Simulated disk/DB write failure'));
+          return fn(tx);
+        },
+        ...args,
+      );
+    });
+
+    const sReq = createSignupRequest({
+      email,
+      password: BASE_TEST_PASSWORD,
+      confirmPassword: BASE_TEST_PASSWORD,
+    });
+    const sRes = await handleSignup(sReq);
+    expect(sRes.status).toBe(500);
+    expect(sRes.headers.get('set-cookie')).toBeNull();
+
+    // Verify 0 user rows and 0 session rows
+    const userCount = await prisma.user.count({ where: { email } });
+    expect(userCount).toBe(0);
+    const sessionCount = await prisma.session.count();
+    expect(sessionCount).toBe(0);
+  });
+
+  it('30. signup transaction atomicity: rolls back completely on audit log insert failure', async () => {
+    const email = `fail.audit.${Date.now()}@example.com`;
+    const orig$transaction = prisma.$transaction.bind(prisma);
+    vi.spyOn(prisma, '$transaction').mockImplementationOnce(async (fn: any, ...args: any[]) => {
+      return orig$transaction(
+        async (tx: any) => {
+          tx.auditLog.create = vi
+            .fn()
+            .mockRejectedValue(new Error('Simulated audit log insert constraint failure'));
+          return fn(tx);
+        },
+        ...args,
+      );
+    });
+
+    const sReq = createSignupRequest({
+      email,
+      password: BASE_TEST_PASSWORD,
+      confirmPassword: BASE_TEST_PASSWORD,
+    });
+    const sRes = await handleSignup(sReq);
+    expect(sRes.status).toBe(500);
+    expect(sRes.headers.get('set-cookie')).toBeNull();
+
+    // Verify atomic rollback: user was NOT committed, 0 users, 0 sessions
+    const userCount = await prisma.user.count({ where: { email } });
+    expect(userCount).toBe(0);
+    const sessionCount = await prisma.session.count();
+    expect(sessionCount).toBe(0);
+  });
+
+  it('31. signup transaction atomicity: rolls back completely on transaction commit failure', async () => {
+    const email = `fail.commit.${Date.now()}@example.com`;
+    vi.spyOn(prisma, '$transaction').mockRejectedValueOnce(
+      new Error('Simulated PostgreSQL commit deadlock/timeout'),
+    );
+
+    const sReq = createSignupRequest({
+      email,
+      password: BASE_TEST_PASSWORD,
+      confirmPassword: BASE_TEST_PASSWORD,
+    });
+    const sRes = await handleSignup(sReq);
+    expect(sRes.status).toBe(500);
+    expect(sRes.headers.get('set-cookie')).toBeNull();
+
+    const userCount = await prisma.user.count({ where: { email } });
+    expect(userCount).toBe(0);
+  });
+
+  it('32. database startup guards: test mode strictly rejects protected and non-allowlisted databases', () => {
+    expect(() => {
+      verifyDatabaseStartupGuard('web', 'postgresql://user:secret123@127.0.0.1:5432/javaverse', {
+        nodeEnv: 'test',
+      });
+    }).toThrow(/CRITICAL STARTUP GUARD: Database "javaverse" is not an allowlisted test database/);
+
+    expect(() => {
+      verifyDatabaseStartupGuard(
+        'worker',
+        'postgresql://user:secret123@127.0.0.1:5432/production',
+        {
+          nodeEnv: 'test',
+        },
+      );
+    }).toThrow(/CRITICAL STARTUP GUARD: Database "production" is not an allowlisted test database/);
+  });
+
+  it('33. database startup guards: allows test databases and warns when dev mode connects to test database', () => {
+    // Test mode on test database succeeds
+    const result = verifyDatabaseStartupGuard(
+      'web',
+      'postgresql://user:secret123@127.0.0.1:5432/javaverse_test',
+      { nodeEnv: 'test' },
+    );
+    expect(result.dbName).toBe('javaverse_test');
+    expect(result.mode).toBe('test');
+    expect(result.component).toBe('web');
+
+    // Dev mode with _test database logs a warning
+    const warnFn = vi.fn();
+    const infoFn = vi.fn();
+    verifyDatabaseStartupGuard('web', 'postgresql://user:secret123@127.0.0.1:5432/javaverse_test', {
+      nodeEnv: 'development',
+      logger: { info: infoFn, warn: warnFn },
+    });
+    expect(warnFn).toHaveBeenCalledTimes(1);
+    const firstCall = warnFn.mock.calls[0];
+    expect(firstCall?.[1]).toContain(
+      'WARNING: Development mode is connected to test database "javaverse_test"',
+    );
+  });
+
+  it('34. database diagnostics extraction never exposes credentials, passwords, or query tokens', () => {
+    const sensitiveUrl =
+      'postgresql://admin_user:super_secret_pw!@db.internal.host:5433/javaverse_test?sslmode=require&application_name=test';
+    const diag = getSafeDatabaseDiagnostics(sensitiveUrl);
+
+    expect(diag.dbHost).toBe('db.internal.host');
+    expect(diag.dbPort).toBe('5433');
+    expect(diag.dbName).toBe('javaverse_test');
+
+    // Strict guarantee: no credentials in string representation
+    const serialized = JSON.stringify(diag);
+    expect(serialized).not.toContain('admin_user');
+    expect(serialized).not.toContain('super_secret_pw');
+    expect(serialized).not.toContain('sslmode');
+  });
+
+  it('35. complete database-backed acceptance journey: signup, immediate DB check, session resolve, logout, login with same credentials', async () => {
+    const email = `acceptance.learner.${Date.now()}@example.local`;
+    const password = BASE_TEST_PASSWORD;
+
+    // 1. Confirm zero matching users in DB
+    const initialCount = await prisma.user.count({ where: { email } });
+    expect(initialCount).toBe(0);
+
+    // 2. Submit signup
+    const sReq = createSignupRequest({
+      displayName: 'Acceptance Learner',
+      email,
+      password,
+      confirmPassword: password,
+    });
+    const sRes = await handleSignup(sReq);
+    expect(sRes.status).toBe(201);
+    const sData = await sRes.json();
+    expect(sData.data.requiresSignIn).toBe(true);
+
+    // 3. Confirm NO session token in Set-Cookie header
+    const rawSessionToken = extractRawSessionToken(sRes);
+    expect(rawSessionToken).toBeNull();
+
+    // 4. Immediately query DB: assert exactly 1 user row exists and 0 sessions exist
+    const dbUsers = await prisma.user.findMany({ where: { email } });
+    expect(dbUsers.length).toBe(1);
+    const dbUser = dbUsers[0]!;
+    expect(dbUser.email).toBe(email.toLowerCase());
+    expect(dbUser.passwordHash).not.toBeNull();
+    expect(dbUser.passwordHash!.startsWith('$argon2id$')).toBe(true);
+
+    const initialSessions = await prisma.session.count({ where: { userId: dbUser.id } });
+    expect(initialSessions).toBe(0);
+
+    // 5. Verify the controlled password matches the stored Argon2id hash
+    const isPwValid = await verifyPassword(password, dbUser.passwordHash!);
+    expect(isPwValid).toBe(true);
+
+    // 6. Sign in with the exact same credentials: creates exactly 1 session
+    const lReq1 = createLoginRequest({ email, password });
+    const lRes1 = await handleLogin(lReq1);
+    expect(lRes1.status).toBe(200);
+    const loginRawToken = extractRawSessionToken(lRes1);
+    expect(loginRawToken).not.toBeNull();
+
+    // 7. Assert one valid session row references that user
+    const dbSessions = await prisma.session.findMany({
+      where: { userId: dbUser.id, revokedAt: null },
+    });
+    expect(dbSessions.length).toBe(1);
+
+    // 8. Refresh/resolve dashboard session using raw session token
+    const resolvedAuth = await resolveSession(loginRawToken);
+    expect(resolvedAuth).not.toBeNull();
+    expect(resolvedAuth!.user.id).toBe(dbUser.id);
+    expect(resolvedAuth!.user.email).toBe(dbUser.email);
+
+    // 9. Sign out: assert session is revoked in DB
+    const logoutReq = new NextRequest('http://localhost:3000/api/v1/auth/logout', {
+      method: 'POST',
+      headers: {
+        origin: 'http://localhost:3000',
+        'Content-Type': 'application/json',
+        'x-csrf-token': createCsrfToken({ sessionId: dbSessions[0]!.publicId }),
+        cookie: `${SESSION_COOKIE_NAME}=${loginRawToken}`,
+      },
+    });
+    const logoutRes = await handleLogout(logoutReq);
+    expect(logoutRes.status).toBe(200);
+
+    const activeSessionsAfterLogout = await prisma.session.count({
+      where: { userId: dbUser.id, revokedAt: null },
+    });
+    expect(activeSessionsAfterLogout).toBe(0);
+
+    // 10. Login again with exact same credentials
+    const lReq2 = createLoginRequest({ email, password });
+    const lRes2 = await handleLogin(lReq2);
+    expect(lRes2.status).toBe(200);
+    const loginData = await lRes2.json();
+    expect(loginData.data.user.id).toBe(dbUser.id);
+
+    // 11. Confirm no duplicate user row was created
+    const finalUsers = await prisma.user.findMany({ where: { email } });
+    expect(finalUsers.length).toBe(1);
+    expect(finalUsers[0]!.id).toBe(dbUser.id);
+  });
+
+  it('36. dashboard fixture helper fails closed when pointing to development database "javaverse"', async () => {
+    const { getDashboardFixtureState } = await import('@/components/fixtures/dashboardData');
+    const origEnv = process.env.E2E_FIXTURES_ENABLED;
+    const origDb = process.env.DATABASE_URL;
+    try {
+      process.env.E2E_FIXTURES_ENABLED = 'true';
+      // Case 1: Pointing to development database
+      process.env.DATABASE_URL =
+        'postgresql://javaverse:javaverse@127.0.0.1:5432/javaverse?schema=public';
+      expect(getDashboardFixtureState({ _fixture: 'standard' })).toBeNull();
+
+      // Case 2: Pointing to test database
+      process.env.DATABASE_URL =
+        'postgresql://javaverse:javaverse@127.0.0.1:5432/javaverse_test?schema=public';
+      expect(getDashboardFixtureState({ _fixture: 'standard' })).toBe('standard');
+
+      // Case 3: E2E_FIXTURES_ENABLED is false/unset
+      process.env.E2E_FIXTURES_ENABLED = 'false';
+      expect(getDashboardFixtureState({ _fixture: 'standard' })).toBeNull();
+    } finally {
+      process.env.E2E_FIXTURES_ENABLED = origEnv;
+      process.env.DATABASE_URL = origDb;
+    }
   });
 });

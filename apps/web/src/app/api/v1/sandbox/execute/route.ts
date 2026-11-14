@@ -8,7 +8,7 @@ import { ExecuteCodeSchema } from '@javaverse/schemas';
 
 /**
  * POST /api/v1/sandbox/execute
- * Direct interactive playground execution running code inside the isolated container runner.
+ * Direct interactive playground execution running code inside the safe local execution environment.
  */
 export async function POST(request: NextRequest) {
   const sessionToken = extractSessionCookie(request);

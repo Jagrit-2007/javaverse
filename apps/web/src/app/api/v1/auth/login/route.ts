@@ -1,8 +1,9 @@
 import { NextRequest } from 'next/server';
-import { prisma } from '@javaverse/db';
+import { prisma, getDatabaseNameFromUrl } from '@javaverse/db';
 import { loginSchema } from '@javaverse/schemas';
 import { verifyPassword, verifyDummyPassword, canonicalizeEmail } from '@javaverse/security';
-import { validateCsrf } from '@/lib/csrf';
+import { createLogger } from '@javaverse/observability';
+import { validateCsrf, consumeCsrfToken } from '@/lib/csrf';
 import { checkRateLimit, getClientIp } from '@/lib/rateLimiter';
 import {
   generateSessionTokens,
@@ -87,6 +88,28 @@ export async function POST(request: NextRequest) {
     await verifyDummyPassword(password);
   }
 
+  // Safe test-only diagnostic reporting (Section 7: never logs passwords or hashes)
+  if (process.env.NODE_ENV === 'test') {
+    let dbName = 'unknown';
+    try {
+      dbName = getDatabaseNameFromUrl(process.env.DATABASE_URL);
+    } catch {
+      // safe fallback
+    }
+    const diagLogger = createLogger({ service: 'web' });
+    diagLogger.info(
+      {
+        accountLookupSucceeded: !!user,
+        accountStatus: user ? user.status : null,
+        passwordVerificationSucceeded: passwordValid,
+        databaseName: dbName,
+        userId: user ? user.id : null,
+        sessionCreated: !!(user && passwordValid && user.status === 'ACTIVE'),
+      },
+      'Auth login safe diagnostic checkpoint',
+    );
+  }
+
   if (!user || !passwordValid || user.status !== 'ACTIVE') {
     await recordAuditEvent({
       action: 'auth.login_failed',
@@ -130,6 +153,7 @@ export async function POST(request: NextRequest) {
     sameSite: 'lax',
   });
   response.headers.set('Set-Cookie', sessionCookie);
+  consumeCsrfToken(request.headers.get('x-csrf-token'));
 
   return response;
 }

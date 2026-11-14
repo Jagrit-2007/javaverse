@@ -1,5 +1,8 @@
 # Phase 2 Visual Review & Design System Compliance Report
 
+> [!IMPORTANT]
+> **Historical record.** This document describes an earlier repository state and is not the current product specification.
+
 ## Executive Summary
 This document records the visual inspection, contrast audits, reflow verification, and UI comparison for **Phase 2: Design System & Learning Shell** on branch `phase/02-design-system`.
 

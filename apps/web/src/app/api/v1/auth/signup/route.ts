@@ -2,16 +2,12 @@ import { NextRequest } from 'next/server';
 import { prisma } from '@javaverse/db';
 import { signupSchema } from '@javaverse/schemas';
 import { canonicalizeEmail, hashPassword, checkPasswordBreach } from '@javaverse/security';
-import { validateCsrf } from '@/lib/csrf';
+import { validateCsrf, consumeCsrfToken } from '@/lib/csrf';
 import { checkRateLimit, getClientIp } from '@/lib/rateLimiter';
 import {
   LOCAL_ACCOUNT_LIMIT,
   ACCOUNT_CREATION_ADVISORY_LOCK_ID,
-  generateSessionTokens,
-  createSessionRow,
-  buildCookieHeader,
-  SESSION_COOKIE_NAME,
-  SESSION_MAX_AGE_SECONDS,
+  getSessionFromRequest,
   getSafeDisplayName,
 } from '@/lib/auth';
 import { recordAuditEvent } from '@/lib/audit';
@@ -25,6 +21,16 @@ export async function POST(request: NextRequest) {
   const csrfResult = validateCsrf(request, { flow: 'signup' });
   if (!csrfResult.valid) {
     return jsonError('CSRF_ERROR', csrfResult.reason || 'Invalid CSRF token', 403);
+  }
+
+  // 1b. Already-authenticated guard: block signup if user already has an active session
+  const existingSession = await getSessionFromRequest(request);
+  if (existingSession && existingSession.user.status === 'ACTIVE') {
+    return jsonError(
+      'ALREADY_AUTHENTICATED',
+      'An account is already signed in. Sign out before creating another account.',
+      400,
+    );
   }
 
   // 2. IP Rate limit
@@ -83,17 +89,33 @@ export async function POST(request: NextRequest) {
 
   // 5. Password breach check
   const breach = await checkPasswordBreach(password, env.HIBP_ENFORCEMENT_MODE);
+  if (breach.common) {
+    return jsonError(
+      'PASSWORD_COMMON',
+      breach.message || 'This password is too common. Choose a longer, less predictable password.',
+      400,
+    );
+  }
   if (breach.breached) {
     return jsonError(
       'PASSWORD_BREACHED',
-      'This password appears in known security breaches. Please choose a different password.',
+      breach.message ||
+        'This password appears in a known breach list. Choose a different password or use a password manager to generate one.',
       400,
     );
+  }
+  if (breach.degraded) {
+    await recordAuditEvent({
+      action: 'auth.breach_check_degraded',
+      actorType: 'SYSTEM',
+      anonymousId: clientIp,
+      clientIp,
+      metadata: { provider: 'hibp', reason: 'unavailable', degraded: true },
+    });
   }
 
   // 6. Hash password
   const passwordHash = await hashPassword(password);
-  const { rawToken, tokenDigest, publicId } = generateSessionTokens();
 
   let createdUser: { id: string; email: string; displayName: string | null };
 
@@ -130,16 +152,7 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      // e. Create session row
-      await createSessionRow({
-        userId: user.id,
-        tokenDigest,
-        publicId,
-        isMfaVerified: false,
-        tx,
-      });
-
-      // f. Record audit log
+      // e. Record audit log inside transaction
       await recordAuditEvent({
         action: 'auth.user_registered',
         actorType: 'USER',
@@ -170,25 +183,20 @@ export async function POST(request: NextRequest) {
     return jsonError('REGISTRATION_FAILED', 'Failed to create account. Please try again.', 500);
   }
 
-  // 8. Set session cookie and return safe user response (omit internal role from response)
-  const response = jsonOk(
+  // 8. Consume CSRF token and return 201 Created without session cookie
+  consumeCsrfToken(request.headers.get('x-csrf-token'));
+
+  return jsonOk(
     {
+      success: true,
+      message: 'Account created successfully. Sign in to continue.',
       user: {
         id: createdUser.id,
         email: createdUser.email,
         displayName: getSafeDisplayName(createdUser),
       },
+      requiresSignIn: true,
     },
     { status: 201 },
   );
-
-  const sessionCookie = buildCookieHeader(SESSION_COOKIE_NAME, rawToken, {
-    maxAge: SESSION_MAX_AGE_SECONDS,
-    path: '/',
-    httpOnly: true,
-    sameSite: 'lax',
-  });
-  response.headers.set('Set-Cookie', sessionCookie);
-
-  return response;
 }

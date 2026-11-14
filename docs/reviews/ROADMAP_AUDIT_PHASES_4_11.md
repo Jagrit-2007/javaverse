@@ -1,5 +1,8 @@
 # JavaVerse Integrated Roadmap Audit — Phases 4 Through 11
 
+> [!IMPORTANT]
+> **Historical record.** This document describes an earlier repository state and is not the current product specification.
+
 **Status:** APPROVED FOR CONTINUOUS IMPLEMENTATION  
 **Date:** 2026-11-05  
 **Spec Authority:** Part S (normative override) + Part B + Parts G, I, J, K, L, M, N, O, P, Q, R (Part H retired)  
